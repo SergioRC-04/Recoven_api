@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { MailerService } from '@nestjs-modules/mailer';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class MailService {
-  constructor(private readonly mailerService: MailerService) {}
+  constructor(
+    private readonly mailerService: MailerService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   getMail(): string {
     return 'Servicio de correo electrónico funcionando correctamente!';
@@ -21,6 +25,20 @@ export class MailService {
       especialidad,
       mensaje,
     } = data;
+
+    // 1. Guardar primero en la base de datos SQLite
+    await this.prisma.lead.create({
+      data: {
+        nombre: data.nombre,
+        telefono: data.telefono,
+        email: data.email,
+        empresa: data.empresa,
+        direccion: data.direccion,
+        servicio: data.servicio,
+        especialidad: data.especialidad,
+        mensaje: data.mensaje,
+      },
+    });
 
     await this.mailerService.sendMail({
       to: 'srodriguezcabana@gmail.com', // El correo de prueba
@@ -57,7 +75,7 @@ export class MailService {
     });
   }
 
-  // 🔒 NUEVA FUNCIÓN: Exclusiva para el Segundo Factor de Autenticación (2FA)
+  // FUNCIÓN: Exclusiva para el Segundo Factor de Autenticación (2FA)
   async sendSecurityCode(email: string, code: string) {
     await this.mailerService.sendMail({
       to: email,

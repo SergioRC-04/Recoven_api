@@ -34,3 +34,16 @@ model Admin {
   twoFactorCode   String?   // Para guardar el código temporal de 6 dígitos
   twoFactorExpires DateTime? // Para controlar que expire en 5 minutos
 }
+
+model Lead {
+  id           Int      @id @default(autoincrement())
+  nombre       String
+  telefono     String
+  email        String
+  empresa      String?  // Opcional
+  direccion    String?  // Opcional
+  servicio     String
+  especialidad String?  // Opcional
+  mensaje      String?  // Opcional
+  createdAt    DateTime @default(now()) // Fecha de registro
+}
