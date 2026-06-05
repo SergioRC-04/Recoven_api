@@ -8,16 +8,17 @@ export class AnalyticsService {
 
   async getMetrics() {
     return await this.prisma.metric.findMany({
-      orderBy: { id: 'asc' },
+      // Opcional: Ordenarlos por año y luego por ID para que al front lleguen organizados
+      orderBy: [{ year: 'asc' }, { id: 'asc' }],
     });
   }
 
   async updateOrCreateMetric(dto: UpdateMetricDto) {
-    const { sede, mes, aprovechamiento, rechazo } = dto;
+    const { sede, mes, year, aprovechamiento, rechazo } = dto;
 
     return await this.prisma.metric.upsert({
       where: {
-        sede_mes: { sede, mes },
+        sede_mes_year: { sede, mes, year }, // Usamos el índice único compuesto para buscar la métrica existente
       },
       update: {
         aprovechamiento,
@@ -26,6 +27,7 @@ export class AnalyticsService {
       create: {
         sede,
         mes,
+        year,
         aprovechamiento,
         rechazo,
       },

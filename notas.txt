@@ -1,4 +1,5 @@
 Cambiar la direccion de la imagen cuando se despliegue
-
+Recoger datos de solicitudes
+si siempre es el mismo token, es inseguro
 
 Hacer testeo

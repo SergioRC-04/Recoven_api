@@ -16,18 +16,21 @@ model Metric {
   id              Int      @id @default(autoincrement())
   sede            String   // "BARRANQUILLA" o "PUERTO_COLOMBIA"
   mes             String   // "Enero", "Febrero", "Marzo", "Abril"
+  year            Int      // Año de la métrica
   aprovechamiento Float    // Toneladas de aprovechamiento
   rechazo         Float    // Toneladas de rechazo
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   // Evita que se duplique el mismo mes para una misma sede
-  @@unique([sede, mes])
+  @@unique([sede, mes, year])
 }
 
-// Modelo básico para el Administrador que mencionas para el futuro Login
 model Admin {
-  id       Int    @id @default(autoincrement())
-  username String @unique
-  password String // Almacenada con hash (bcrypt) más adelante
+  id              Int       @id @default(autoincrement())
+  username        String    @unique
+  password        String    
+  email           String    // El correo donde llegará el código (ej: el de Don Luis o el tuyo)
+  twoFactorCode   String?   // Para guardar el código temporal de 6 dígitos
+  twoFactorExpires DateTime? // Para controlar que expire en 5 minutos
 }

@@ -1,17 +1,19 @@
-import { Body, Controller, Get, Put } from '@nestjs/common';
+import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { UpdateMetricDto } from './dto/update-metric.dto';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
-@Controller('analytics')
+@Controller('metrics')
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
-  @Get('metrics')
+  @Get('')
   async getAllMetrics() {
     return await this.analyticsService.getMetrics();
   }
 
-  @Put('update')
+  @UseGuards(JwtAuthGuard)
+  @Put('')
   async updateMetric(@Body() updateMetricDto: UpdateMetricDto) {
     return await this.analyticsService.updateOrCreateMetric(updateMetricDto);
   }

@@ -56,4 +56,25 @@ export class MailService {
       `,
     });
   }
+
+  // 🔒 NUEVA FUNCIÓN: Exclusiva para el Segundo Factor de Autenticación (2FA)
+  async sendSecurityCode(email: string, code: string) {
+    await this.mailerService.sendMail({
+      to: email,
+      // Usamos el truco del '+' pero enfocado en seguridad para evitar el "yo"
+      from: `"Seguridad RECOVEN" <srodriguezcabana+security@gmail.com>`,
+      subject: '🔒 Código de verificación de seguridad - RECOVEN',
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; max-width: 500px;">
+          <h2 style="color: #111827; margin-bottom: 4px;">Control de Acceso</h2>
+          <p style="color: #4b5563; font-size: 14px;">Se ha solicitado un inicio de sesión en el panel administrativo de RECOVEN.</p>
+          <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 6px; text-align: center; margin: 20px 0;">
+            <span style="font-size: 12px; color: #166534; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Tu código de verificación</span>
+            <h1 style="color: #10b981; margin: 8px 0 0 0; font-size: 32px; letter-spacing: 6px; font-family: monospace;">${code}</h1>
+          </div>
+          <p style="color: #9ca3af; font-size: 12px; margin-top: 20px;">Este código expirará en 5 minutos. Si no solicitaste este acceso, puedes ignorar este correo de forma segura.</p>
+        </div>
+      `,
+    });
+  }
 }

@@ -10,6 +10,10 @@ export class UpdateMetricDto {
   mes: string;
 
   @IsNumber()
+  @IsNotEmpty()
+  year: number;
+
+  @IsNumber()
   aprovechamiento: number;
 
   @IsNumber()
