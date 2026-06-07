@@ -21,7 +21,6 @@ export class AnalyticsController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('export_pdf')
   async descargarPdfReporte(@Res() res: Response) {
     // Llamamos al servicio que ahora devuelve un Buffer

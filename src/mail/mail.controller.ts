@@ -4,7 +4,6 @@ import { CreateLeadDto } from './dto/create-lead.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import type { Response } from 'express';
-import ExcelJS from 'exceljs';
 
 @Controller('leads')
 export class MailController {
@@ -24,74 +23,32 @@ export class MailController {
   @Get('')
   async obtenerLeads() {
     return await this.prisma.lead.findMany({
-      orderBy: { createdAt: 'desc' }, // Los más recientes primero
+      orderBy: { createdAt: 'desc' },
     });
   }
 
-  // 2. Endpoint para descargar el archivo Excel
+  // 2. Endpoint para descargar el archivo Excel (ahora usa el servicio)
   @UseGuards(JwtAuthGuard)
   @Get('export_excel')
   async exportarExcel(@Res() res: Response) {
-    // Buscar todos los leads de la DB
-    const leads = await this.prisma.lead.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
+    try {
+      const buffer = await this.mailService.exportLeadsToExcel();
 
-    // Importamos exceljs dinámicamente o de forma estándar
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Leads RECOVEN');
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename=Leads_RECOVEN_${new Date().getFullYear()}.xlsx`,
+      );
 
-    // Definir las columnas del Excel con sus anchos
-    worksheet.columns = [
-      { header: 'ID', key: 'id', width: 10 },
-      { header: 'Fecha', key: 'fecha', width: 20 },
-      { header: 'Nombre', key: 'nombre', width: 25 },
-      { header: 'Teléfono', key: 'telefono', width: 15 },
-      { header: 'Correo Electrónico', key: 'email', width: 25 },
-      { header: 'Empresa', key: 'empresa', width: 20 },
-      { header: 'Dirección', key: 'direccion', width: 25 },
-      { header: 'Servicio Solicitado', key: 'servicio', width: 20 },
-      { header: 'Especialidad', key: 'especialidad', width: 20 },
-      { header: 'Mensaje', key: 'mensaje', width: 40 },
-    ];
-
-    // Darle un diseño básico a la fila del encabezado (Negrita y color gris claro)
-    worksheet.getRow(1).font = { bold: true };
-    worksheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFEAEAEA' },
-    };
-
-    // Llenar las filas con los datos de SQLite
-    leads.forEach((lead) => {
-      worksheet.addRow({
-        id: lead.id,
-        fecha: lead.createdAt.toISOString().split('T')[0], // Formato YYYY-MM-DD
-        nombre: lead.nombre,
-        telefono: lead.telefono,
-        email: lead.email,
-        empresa: lead.empresa || 'N/A',
-        direccion: lead.direccion || 'N/A',
-        servicio: lead.servicio,
-        especialidad: lead.especialidad || 'N/A',
-        mensaje: lead.mensaje || 'Sin mensaje',
+      res.send(buffer);
+    } catch {
+      res.status(500).json({
+        success: false,
+        message: 'Error al generar el archivo Excel',
       });
-    });
-
-    // Configurar las cabeceras HTTP para indicarle al navegador que es un archivo descargable
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    );
-    res.setHeader(
-      'Content-Disposition',
-      'attachment; filename=' +
-        `Leads_RECOVEN_${new Date().getFullYear()}.xlsx`,
-    );
-
-    // Escribir el archivo directamente en la respuesta HTTP
-    await workbook.xlsx.write(res);
-    res.end();
+    }
   }
 }

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { MailerService } from '@nestjs-modules/mailer';
 import { PrismaService } from '../prisma/prisma.service';
+import ExcelJS from 'exceljs';
 
 @Injectable()
 export class MailService {
@@ -9,10 +10,6 @@ export class MailService {
     private readonly mailerService: MailerService,
     private readonly prisma: PrismaService,
   ) {}
-
-  getMail(): string {
-    return 'Servicio de correo electrónico funcionando correctamente!';
-  }
 
   async sendLeadEmail(data: CreateLeadDto) {
     const {
@@ -26,7 +23,6 @@ export class MailService {
       mensaje,
     } = data;
 
-    // 1. Guardar primero en la base de datos SQLite
     await this.prisma.lead.create({
       data: {
         nombre: data.nombre,
@@ -41,10 +37,9 @@ export class MailService {
     });
 
     await this.mailerService.sendMail({
-      to: 'srodriguezcabana@gmail.com', // El correo de prueba
-      from: 'srodriguezcabana+prueba@gmail.com', // El correo de envío
+      to: 'srodriguezcabana@gmail.com',
+      from: 'srodriguezcabana+prueba@gmail.com',
       subject: `🚨 Nueva Solicitud de Servicio: ${servicio}`,
-      // Usamos 'html' para estructurarlo de forma limpia e incluir la firma visual
       html: `
         <div style="font-family: 'Inter', sans-serif; color: #1f2937; max-width: 600px; line-height: 1.6;">
           <h2 style="color: #059669; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">
@@ -65,7 +60,6 @@ export class MailService {
           
           <br/>
           <hr style="border: 0; border-top: 1px solid #e5e7eb;" />
-          <!-- Ejemplo de imagen default adjunta (Incrustada por CID) -->
           <div style="text-align: center; margin-top: 15px;">
             <img src="https://landingpage-recoven.vercel.app/assets/img/logo.png" alt="RECOVEN Logo" style="width: 140px;" />
             <p style="font-size: 11px; color: #9ca3af;">Este es un correo automático generado desde la Landing Page</p>
@@ -75,11 +69,9 @@ export class MailService {
     });
   }
 
-  // FUNCIÓN: Exclusiva para el Segundo Factor de Autenticación (2FA)
   async sendSecurityCode(email: string, code: string) {
     await this.mailerService.sendMail({
       to: email,
-      // Usamos el truco del '+' pero enfocado en seguridad para evitar el "yo"
       from: `"Seguridad RECOVEN" <srodriguezcabana+security@gmail.com>`,
       subject: '🔒 Código de verificación de seguridad - RECOVEN',
       html: `
@@ -94,5 +86,55 @@ export class MailService {
         </div>
       `,
     });
+  }
+
+  // Método corregido: exporta los leads a Excel y devuelve un Buffer
+  async exportLeadsToExcel(): Promise<Buffer> {
+    const leads = await this.prisma.lead.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Leads RECOVEN');
+
+    worksheet.columns = [
+      { header: 'ID', key: 'id', width: 10 },
+      { header: 'Fecha', key: 'fecha', width: 20 },
+      { header: 'Nombre', key: 'nombre', width: 25 },
+      { header: 'Teléfono', key: 'telefono', width: 15 },
+      { header: 'Correo Electrónico', key: 'email', width: 25 },
+      { header: 'Empresa', key: 'empresa', width: 20 },
+      { header: 'Dirección', key: 'direccion', width: 25 },
+      { header: 'Servicio Solicitado', key: 'servicio', width: 20 },
+      { header: 'Especialidad', key: 'especialidad', width: 20 },
+      { header: 'Mensaje', key: 'mensaje', width: 40 },
+    ];
+
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFEAEAEA' },
+    };
+
+    leads.forEach((lead) => {
+      worksheet.addRow({
+        id: lead.id,
+        fecha: lead.createdAt.toISOString().split('T')[0],
+        nombre: lead.nombre,
+        telefono: lead.telefono,
+        email: lead.email,
+        empresa: lead.empresa || 'N/A',
+        direccion: lead.direccion || 'N/A',
+        servicio: lead.servicio,
+        especialidad: lead.especialidad || 'N/A',
+        mensaje: lead.mensaje || 'Sin mensaje',
+      });
+    });
+
+    // writeBuffer devuelve Promise<Buffer> pero las definiciones de tipo pueden causar conflictos.
+    // Se aplica un cast doble para satisfacer a TypeScript.
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer as unknown as Buffer;
   }
 }
