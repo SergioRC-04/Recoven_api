@@ -17,4 +17,10 @@ export class AuthController {
   async verify2FA(@Body() body: { username: string; code: string }) {
     return await this.authService.verify2FA(body.username, body.code);
   }
+
+  @Post('resend-2fa')
+  @HttpCode(HttpStatus.OK)
+  async resend2fa(@Body() body: { username: string }) {
+    return await this.authService.sendTwoFactorCode(body.username);
+  }
 }

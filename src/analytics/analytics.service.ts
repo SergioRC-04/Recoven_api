@@ -4,6 +4,7 @@ import { UpdateMetricDto } from './dto/update-metric.dto';
 import PDFDocument from 'pdfkit';
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
 import chartJsDataLabels from 'chartjs-plugin-datalabels';
+import { DeleteMetricDto } from './dto/delete-metric.dto';
 
 // Función auxiliar para convertir el stream del PDF a Buffer
 function streamToBuffer(stream: PDFKit.PDFDocument): Promise<Buffer> {
@@ -25,16 +26,20 @@ export class AnalyticsService {
     });
   }
 
-  async updateOrCreateMetricsBulk(dtos: UpdateMetricDto[]) {
-    const operaciones = dtos.map((dto) => {
-      const { sede, mes, year, aprovechamiento, rechazo } = dto;
-      return this.prisma.metric.upsert({
-        where: { sede_mes_year: { sede, mes, year } },
-        update: { aprovechamiento, rechazo },
-        create: { sede, mes, year, aprovechamiento, rechazo },
-      });
+  async updateOrCreateMetric(dto: UpdateMetricDto) {
+    const { sede, mes, year, aprovechamiento, rechazo } = dto;
+    return await this.prisma.metric.upsert({
+      where: { sede_mes_year: { sede, mes, year } },
+      update: { aprovechamiento, rechazo },
+      create: { sede, mes, year, aprovechamiento, rechazo },
     });
-    return await Promise.all(operaciones);
+  }
+
+  async deleteMetric(dto: DeleteMetricDto) {
+    const { sede, mes, year } = dto;
+    return await this.prisma.metric.delete({
+      where: { sede_mes_year: { sede, mes, year } },
+    });
   }
 
   async generarReportePDF(): Promise<Buffer> {

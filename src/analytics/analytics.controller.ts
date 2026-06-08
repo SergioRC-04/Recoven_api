@@ -1,8 +1,17 @@
-import { Body, Controller, Get, Put, UseGuards, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Put,
+  UseGuards,
+  Res,
+  Delete,
+} from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { UpdateMetricDto } from './dto/update-metric.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import type { Response } from 'express';
+import { DeleteMetricDto } from './dto/delete-metric.dto';
 
 @Controller('metrics')
 export class AnalyticsController {
@@ -15,10 +24,14 @@ export class AnalyticsController {
 
   @UseGuards(JwtAuthGuard)
   @Put('')
-  async updateMetric(@Body() updateMetricDto: UpdateMetricDto[]) {
-    return await this.analyticsService.updateOrCreateMetricsBulk(
-      updateMetricDto,
-    );
+  async updateMetric(@Body() updateMetricDto: UpdateMetricDto) {
+    return await this.analyticsService.updateOrCreateMetric(updateMetricDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('')
+  async deleteMetric(@Body() deleteMetricDto: DeleteMetricDto) {
+    return await this.analyticsService.deleteMetric(deleteMetricDto);
   }
 
   @Get('export_pdf')
