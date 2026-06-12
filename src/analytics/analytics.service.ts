@@ -4,7 +4,8 @@ import { Prisma } from '@prisma/client';
 import { UpdateMetricDto } from './dto/update-metric.dto';
 import PDFDocument from 'pdfkit';
 import { DeleteMetricDto } from './dto/delete-metric.dto';
-import { createCanvas } from '@napi-rs/canvas';
+import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
+import path from 'path';
 
 // Función auxiliar para convertir el stream del PDF a Buffer
 function streamToBuffer(stream: PDFKit.PDFDocument): Promise<Buffer> {
@@ -56,7 +57,7 @@ export class AnalyticsService {
 
   /**
    * Genera un gráfico de barras horizontal usando @napi-rs/canvas.
-   * Es síncrono, no necesita async/await.
+   * Incluye registro de fuente Open Sans para garantizar texto en Vercel.
    */
   private generarGraficoHorizontal(
     titulo: string,
@@ -64,13 +65,25 @@ export class AnalyticsService {
     datasets: { label: string; data: number[]; backgroundColor: string }[],
     maxValueRounded: number,
   ): Buffer {
+    // Registrar la fuente Open Sans una sola vez (se ejecuta cada vez que se llama a la función)
+    try {
+      const fontPath = path.join(
+        process.cwd(),
+        'fonts',
+        'OpenSans-Regular.ttf',
+      );
+      GlobalFonts.registerFromPath(fontPath, 'Open Sans');
+    } catch (error) {
+      console.error('Error al registrar la fuente Open Sans:', error);
+    }
+
     // Si no hay datos o maxValueRounded es 0, devolvemos un canvas blanco con mensaje
     if (labels.length === 0 || maxValueRounded === 0) {
       const canvas = createCanvas(500, 200);
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, 500, 200);
-      ctx.font = '14px "Arial", sans-serif';
+      ctx.font = '14px "Open Sans", sans-serif';
       ctx.fillStyle = '#999';
       ctx.textAlign = 'center';
       ctx.fillText('No hay datos disponibles', 250, 100);
@@ -99,8 +112,8 @@ export class AnalyticsService {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, width, canvasHeight);
 
-    // Título (fuente segura)
-    ctx.font = 'bold 16px "Arial", sans-serif';
+    // Título (fuente registrada)
+    ctx.font = 'bold 16px "Open Sans", sans-serif';
     ctx.fillStyle = '#111827';
     ctx.textAlign = 'center';
     ctx.fillText(titulo, width / 2, 30);
@@ -108,7 +121,7 @@ export class AnalyticsService {
     // Leyenda
     const legendX = width - 150;
     const legendY = 50;
-    ctx.font = '12px "Arial", sans-serif';
+    ctx.font = '12px "Open Sans", sans-serif';
     ctx.textAlign = 'left';
     for (let i = 0; i < datasets.length; i++) {
       const ds = datasets[i];
@@ -139,7 +152,7 @@ export class AnalyticsService {
       const label = labels[catIndex];
       const yBase = topMargin + catIndex * rowHeight;
 
-      ctx.font = '12px "Arial", sans-serif';
+      ctx.font = '12px "Open Sans", sans-serif';
       ctx.fillStyle = '#374151';
       ctx.textAlign = 'right';
       ctx.fillText(label, leftMargin - 10, yBase + totalGroupHeight / 2 + 6);
@@ -157,7 +170,7 @@ export class AnalyticsService {
         ctx.fillRect(leftMargin, y, barWidth, barHeight);
 
         if (value > 0) {
-          ctx.font = '9px "Arial", sans-serif';
+          ctx.font = '9px "Open Sans", sans-serif';
           ctx.fillStyle = '#1f2937';
           ctx.textAlign = 'left';
           ctx.fillText(
@@ -175,7 +188,7 @@ export class AnalyticsService {
     ctx.moveTo(leftMargin, canvasHeight - bottomMargin);
     ctx.lineTo(leftMargin + maxBarWidth, canvasHeight - bottomMargin);
     ctx.stroke();
-    ctx.font = '10px "Arial", sans-serif';
+    ctx.font = '10px "Open Sans", sans-serif';
     ctx.fillStyle = '#6b7280';
     ctx.textAlign = 'center';
     for (let i = 0; i <= xSteps; i++) {
@@ -189,7 +202,6 @@ export class AnalyticsService {
     }
 
     const buffer = canvas.toBuffer('image/png');
-    // Log para depuración (se verá en Vercel)
     console.log('🎨 Canvas size:', width, canvasHeight);
     console.log('🎨 Buffer size:', buffer.length);
     return buffer;
@@ -200,7 +212,6 @@ export class AnalyticsService {
       orderBy: [{ year: 'asc' }, { sede: 'asc' }, { mes: 'asc' }],
     });
 
-    // Logs para depuración
     console.log('📊 Metrics count:', metrics.length);
     if (metrics.length > 0) {
       console.log('📊 Sample metric:', metrics[0]);
@@ -264,7 +275,7 @@ export class AnalyticsService {
         0,
       );
 
-      // Calcular máximo redondeado como antes, evitando división por cero
+      // Calcular máximo redondeado
       const maxValor = Math.max(
         ...bqAprovechamiento,
         ...bqRechazo,
@@ -278,12 +289,10 @@ export class AnalyticsService {
           ? stepSize
           : Math.ceil((maxValor * 1.15) / stepSize) * stepSize;
 
-      // Logs para depuración
       console.log('📊 Barranquilla aprovechamiento:', bqAprovechamiento);
       console.log('📊 Barranquilla rechazo:', bqRechazo);
       console.log('📊 maxRedondeado:', maxRedondeado);
 
-      // Generar buffers de los gráficos (ahora síncronos)
       const imageBufferBq = this.generarGraficoHorizontal(
         'BODEGA BARRANQUILLA - HISTÓRICO',
         meses,
@@ -361,7 +370,6 @@ export class AnalyticsService {
         .stroke();
 
       const imgWidth = 350;
-      // Calcular altura de la imagen en función del número de meses
       const chartHeight = 80 + meses.length * 35;
       const imgHeight = (imgWidth / 500) * chartHeight;
 
