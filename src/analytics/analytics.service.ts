@@ -56,16 +56,16 @@ export class AnalyticsService {
   }
 
   /**
-   * Genera un gráfico de barras horizontal usando @napi-rs/canvas.
-   * Incluye registro de fuente Open Sans para garantizar texto en Vercel.
+   * Genera un gráfico de barras horizontal adaptativo.
+   * Retorna el buffer de la imagen y la altura final del lienzo.
    */
   private generarGraficoHorizontal(
     titulo: string,
     labels: string[],
     datasets: { label: string; data: number[]; backgroundColor: string }[],
     maxValueRounded: number,
-  ): Buffer {
-    // Registrar la fuente Open Sans una sola vez (se ejecuta cada vez que se llama a la función)
+  ): { buffer: Buffer; height: number } {
+    // Registrar la fuente Open Sans
     try {
       const fontPath = path.join(
         process.cwd(),
@@ -77,29 +77,43 @@ export class AnalyticsService {
       console.error('Error al registrar la fuente Open Sans:', error);
     }
 
-    // Si no hay datos o maxValueRounded es 0, devolvemos un canvas blanco con mensaje
+    const width = 800;
+
+    // Caso sin datos
     if (labels.length === 0 || maxValueRounded === 0) {
-      const canvas = createCanvas(500, 200);
+      const canvas = createCanvas(width, 300);
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, 500, 200);
-      ctx.font = '14px "Open Sans", sans-serif';
+      ctx.fillRect(0, 0, width, 300);
+      ctx.font = '20px "Open Sans", sans-serif';
       ctx.fillStyle = '#999';
       ctx.textAlign = 'center';
-      ctx.fillText('No hay datos disponibles', 250, 100);
-      return canvas.toBuffer('image/png');
+      ctx.fillText('No hay datos disponibles', width / 2, 150);
+      return { buffer: canvas.toBuffer('image/png'), height: 300 };
     }
 
-    const width = 500;
-    const leftMargin = 100;
-    const rightMargin = 50;
-    const topMargin = 80;
-    const bottomMargin = 40;
-    const barHeight = 20;
-    const groupSpacing = 10;
-    const barSpacing = 4;
-
+    // Ajuste dinámico de dimensiones según la cantidad de meses para evitar desbordar el folio
     const numCategories = labels.length;
+    let barHeight = 24;
+    let barSpacing = 4;
+    let groupSpacing = 14;
+
+    if (numCategories > 6) {
+      barHeight = 16;
+      barSpacing = 3;
+      groupSpacing = 8;
+    }
+    if (numCategories > 9) {
+      barHeight = 12;
+      barSpacing = 2;
+      groupSpacing = 6;
+    }
+
+    const leftMargin = 120;
+    const rightMargin = 120; // Margen derecho amplio para que las etiquetas de valor no se corten
+    const topMargin = 95; // Espacio vertical para separar título y leyenda
+    const bottomMargin = 45;
+
     const totalGroupHeight =
       barHeight * datasets.length + barSpacing * (datasets.length - 1);
     const rowHeight = totalGroupHeight + groupSpacing;
@@ -112,31 +126,39 @@ export class AnalyticsService {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, width, canvasHeight);
 
-    // Título (fuente registrada)
-    ctx.font = 'bold 16px "Open Sans", sans-serif';
+    // Título principal (alineado a la izquierda)
+    ctx.font = 'bold 20px "Open Sans", sans-serif';
     ctx.fillStyle = '#111827';
-    ctx.textAlign = 'center';
-    ctx.fillText(titulo, width / 2, 30);
+    ctx.textAlign = 'left';
+    ctx.fillText(titulo, leftMargin, 34);
 
-    // Leyenda
-    const legendX = width - 150;
-    const legendY = 50;
+    // Leyenda horizontal ubicada debajo del título (evita colisiones de texto)
     ctx.font = '12px "Open Sans", sans-serif';
     ctx.textAlign = 'left';
-    for (let i = 0; i < datasets.length; i++) {
-      const ds = datasets[i];
-      ctx.fillStyle = ds.backgroundColor;
-      ctx.fillRect(legendX, legendY + i * 20, 15, 15);
-      ctx.fillStyle = '#000';
-      ctx.fillText(ds.label, legendX + 20, legendY + i * 20 + 12);
-    }
 
-    const maxBarWidth = width - leftMargin - rightMargin - 50;
+    let legendX = leftMargin;
+    const legendY = 58; // Posición vertical debajo del título
 
-    // Cuadrícula vertical
+    // Primer dataset de la leyenda (Aprovechamiento)
+    ctx.fillStyle = datasets[0].backgroundColor;
+    ctx.fillRect(legendX, legendY, 12, 12);
+    ctx.fillStyle = '#4b5563';
+    ctx.fillText(datasets[0].label, legendX + 18, legendY + 10);
+
+    // Segundo dataset de la leyenda (Rechazo)
+    legendX += 160; // Espaciado horizontal entre elementos de la leyenda
+    ctx.fillStyle = datasets[1].backgroundColor;
+    ctx.fillRect(legendX, legendY, 12, 12);
+    ctx.fillStyle = '#4b5563';
+    ctx.fillText(datasets[1].label, legendX + 18, legendY + 10);
+
+    // Espacio de dibujo de barras
+    const maxBarWidth = width - leftMargin - rightMargin;
+
+    // Cuadrícula vertical de fondo
     ctx.save();
-    ctx.strokeStyle = '#e5e7eb';
-    ctx.lineWidth = 0.5;
+    ctx.strokeStyle = '#f3f4f6';
+    ctx.lineWidth = 1;
     const xSteps = 5;
     for (let i = 0; i <= xSteps; i++) {
       const x = leftMargin + (i / xSteps) * maxBarWidth;
@@ -147,48 +169,55 @@ export class AnalyticsService {
     }
     ctx.restore();
 
-    // Dibujar barras y etiquetas de meses
+    // Dibujo de barras y textos
     for (let catIndex = 0; catIndex < numCategories; catIndex++) {
       const label = labels[catIndex];
       const yBase = topMargin + catIndex * rowHeight;
 
-      ctx.font = '12px "Open Sans", sans-serif';
-      ctx.fillStyle = '#374151';
+      // Etiqueta de la categoría (Mes)
+      ctx.font = `${numCategories > 8 ? '12px' : '13px'} "Open Sans", sans-serif`;
+      ctx.fillStyle = '#4b5563';
       ctx.textAlign = 'right';
-      ctx.fillText(label, leftMargin - 10, yBase + totalGroupHeight / 2 + 6);
+      ctx.fillText(label, leftMargin - 12, yBase + totalGroupHeight / 2 + 4);
 
       let yOffset = 0;
       for (let dsIndex = 0; dsIndex < datasets.length; dsIndex++) {
         const ds = datasets[dsIndex];
-        const value = ds.data[catIndex];
+        const value = ds.data[catIndex] || 0;
         const barWidth = Math.min(
           (value / maxValueRounded) * maxBarWidth,
           maxBarWidth,
         );
         const y = yBase + yOffset;
+
         ctx.fillStyle = ds.backgroundColor;
         ctx.fillRect(leftMargin, y, barWidth, barHeight);
 
+        // Valor numérico a la derecha de la barra
         if (value > 0) {
-          ctx.font = '9px "Open Sans", sans-serif';
+          ctx.font = `${numCategories > 8 ? '12px' : '13px'} "Open Sans", sans-serif`;
           ctx.fillStyle = '#1f2937';
           ctx.textAlign = 'left';
           ctx.fillText(
             value.toLocaleString('es-CO'),
-            leftMargin + barWidth + 5,
-            y + barHeight - 3,
+            leftMargin + barWidth + 6,
+            y + barHeight - 4,
           );
         }
         yOffset += barHeight + barSpacing;
       }
     }
 
-    // Eje X y ticks
+    // Eje X inferior
     ctx.beginPath();
+    ctx.strokeStyle = '#d1d5db';
+    ctx.lineWidth = 1.5;
     ctx.moveTo(leftMargin, canvasHeight - bottomMargin);
     ctx.lineTo(leftMargin + maxBarWidth, canvasHeight - bottomMargin);
     ctx.stroke();
-    ctx.font = '10px "Open Sans", sans-serif';
+
+    // Números de escala del Eje X
+    ctx.font = '12px "Open Sans", sans-serif';
     ctx.fillStyle = '#6b7280';
     ctx.textAlign = 'center';
     for (let i = 0; i <= xSteps; i++) {
@@ -197,27 +226,20 @@ export class AnalyticsService {
       ctx.fillText(
         value.toLocaleString('es-CO'),
         x,
-        canvasHeight - bottomMargin + 15,
+        canvasHeight - bottomMargin + 18,
       );
     }
 
-    const buffer = canvas.toBuffer('image/png');
-    console.log('🎨 Canvas size:', width, canvasHeight);
-    console.log('🎨 Buffer size:', buffer.length);
-    return buffer;
+    return {
+      buffer: canvas.toBuffer('image/png'),
+      height: canvasHeight,
+    };
   }
 
   async generarReportePDF(): Promise<Buffer> {
     const metrics = await this.prisma.metric.findMany({
       orderBy: [{ year: 'asc' }, { sede: 'asc' }, { mes: 'asc' }],
     });
-
-    console.log('📊 Metrics count:', metrics.length);
-    if (metrics.length > 0) {
-      console.log('📊 Sample metric:', metrics[0]);
-    } else {
-      console.log('📊 No hay métricas en la base de datos');
-    }
 
     if (metrics.length === 0) {
       throw new Error('No hay métricas para generar el reporte');
@@ -275,7 +297,6 @@ export class AnalyticsService {
         0,
       );
 
-      // Calcular máximo redondeado
       const maxValor = Math.max(
         ...bqAprovechamiento,
         ...bqRechazo,
@@ -289,11 +310,8 @@ export class AnalyticsService {
           ? stepSize
           : Math.ceil((maxValor * 1.15) / stepSize) * stepSize;
 
-      console.log('📊 Barranquilla aprovechamiento:', bqAprovechamiento);
-      console.log('📊 Barranquilla rechazo:', bqRechazo);
-      console.log('📊 maxRedondeado:', maxRedondeado);
-
-      const imageBufferBq = this.generarGraficoHorizontal(
+      // Generación de los buffers de los gráficos con sus alturas relativas
+      const chartBq = this.generarGraficoHorizontal(
         'BODEGA BARRANQUILLA - HISTÓRICO',
         meses,
         [
@@ -307,7 +325,7 @@ export class AnalyticsService {
         maxRedondeado,
       );
 
-      const imageBufferPuerto = this.generarGraficoHorizontal(
+      const chartPuerto = this.generarGraficoHorizontal(
         'BODEGA PUERTO COLOMBIA - HISTÓRICO',
         meses,
         [
@@ -325,7 +343,8 @@ export class AnalyticsService {
         maxRedondeado,
       );
 
-      // --- MAQUETACIÓN VISUAL (idéntica a la original) ---
+      // --- MAQUETACIÓN VISUAL ---
+      // Barra lateral izquierda
       doc.rect(0, 0, 150, 842).fill('#10b981');
       doc
         .fillColor('#ffffff')
@@ -337,6 +356,7 @@ export class AnalyticsService {
         .font('Helvetica')
         .text('ECA SAS ESP', 0, 68, { width: 150, align: 'center' });
 
+      // Texto vertical
       doc
         .save()
         .fillColor('#ffffff')
@@ -369,22 +389,29 @@ export class AnalyticsService {
         .lineWidth(2)
         .stroke();
 
-      const imgWidth = 350;
-      const chartHeight = 80 + meses.length * 35;
-      const imgHeight = (imgWidth / 500) * chartHeight;
+      // Ajuste de ancho a 370 puntos para evitar el desborde horizontal (180 + 370 = 550)
+      const imgWidth = 370;
 
-      doc.image(imageBufferBq, inicioX, 100, {
+      // Escalado de la altura manteniendo el aspecto original de cada canvas
+      const bqImageHeight = (imgWidth / 800) * chartBq.height;
+      doc.image(chartBq.buffer, inicioX, 100, {
         width: imgWidth,
-        height: imgHeight,
-      });
-      const posicionGrafica2 = 100 + imgHeight + 25;
-      doc.image(imageBufferPuerto, inicioX, posicionGrafica2, {
-        width: imgWidth,
-        height: imgHeight,
+        height: bqImageHeight,
       });
 
-      const posicionTotales = Math.max(posicionGrafica2 + imgHeight + 20, 740);
-      doc.rect(inicioX, posicionTotales, 350, 45).fill('#f3f4f6');
+      const posicionGrafica2 = 100 + bqImageHeight + 25;
+      const puertoImageHeight = (imgWidth / 800) * chartPuerto.height;
+      doc.image(chartPuerto.buffer, inicioX, posicionGrafica2, {
+        width: imgWidth,
+        height: puertoImageHeight,
+      });
+
+      // El cuadro de totales se ubica dinámicamente o se fija al final del espacio utilizable
+      const posicionTotales = Math.max(
+        posicionGrafica2 + puertoImageHeight + 20,
+        740,
+      );
+      doc.rect(inicioX, posicionTotales, 370, 45).fill('#f3f4f6');
       doc.rect(inicioX, posicionTotales, 5, 45).fill('#10b981');
 
       doc
