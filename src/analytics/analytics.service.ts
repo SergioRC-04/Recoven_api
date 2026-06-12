@@ -64,6 +64,19 @@ export class AnalyticsService {
     datasets: { label: string; data: number[]; backgroundColor: string }[],
     maxValueRounded: number,
   ): Buffer {
+    // Si no hay datos o maxValueRounded es 0, devolvemos un canvas blanco con mensaje
+    if (labels.length === 0 || maxValueRounded === 0) {
+      const canvas = createCanvas(500, 200);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 500, 200);
+      ctx.font = '14px "Arial", sans-serif';
+      ctx.fillStyle = '#999';
+      ctx.textAlign = 'center';
+      ctx.fillText('No hay datos disponibles', 250, 100);
+      return canvas.toBuffer('image/png');
+    }
+
     const width = 500;
     const leftMargin = 100;
     const rightMargin = 50;
@@ -86,16 +99,16 @@ export class AnalyticsService {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, width, canvasHeight);
 
-    // Título centrado
-    ctx.font = 'bold 16px "Helvetica"';
+    // Título (fuente segura)
+    ctx.font = 'bold 16px "Arial", sans-serif';
     ctx.fillStyle = '#111827';
     ctx.textAlign = 'center';
     ctx.fillText(titulo, width / 2, 30);
 
-    // Leyenda (esquina superior derecha)
+    // Leyenda
     const legendX = width - 150;
     const legendY = 50;
-    ctx.font = '12px "Helvetica"';
+    ctx.font = '12px "Arial", sans-serif';
     ctx.textAlign = 'left';
     for (let i = 0; i < datasets.length; i++) {
       const ds = datasets[i];
@@ -105,9 +118,9 @@ export class AnalyticsService {
       ctx.fillText(ds.label, legendX + 20, legendY + i * 20 + 12);
     }
 
-    const maxBarWidth = width - leftMargin - rightMargin - 50; // espacio extra para números
+    const maxBarWidth = width - leftMargin - rightMargin - 50;
 
-    // Dibujar cuadrícula vertical (opcional, similar a chart.js)
+    // Cuadrícula vertical
     ctx.save();
     ctx.strokeStyle = '#e5e7eb';
     ctx.lineWidth = 0.5;
@@ -126,8 +139,7 @@ export class AnalyticsService {
       const label = labels[catIndex];
       const yBase = topMargin + catIndex * rowHeight;
 
-      // Etiqueta del mes (eje Y)
-      ctx.font = '12px "Helvetica"';
+      ctx.font = '12px "Arial", sans-serif';
       ctx.fillStyle = '#374151';
       ctx.textAlign = 'right';
       ctx.fillText(label, leftMargin - 10, yBase + totalGroupHeight / 2 + 6);
@@ -136,13 +148,16 @@ export class AnalyticsService {
       for (let dsIndex = 0; dsIndex < datasets.length; dsIndex++) {
         const ds = datasets[dsIndex];
         const value = ds.data[catIndex];
-        const barWidth = (value / maxValueRounded) * maxBarWidth;
+        const barWidth = Math.min(
+          (value / maxValueRounded) * maxBarWidth,
+          maxBarWidth,
+        );
         const y = yBase + yOffset;
         ctx.fillStyle = ds.backgroundColor;
         ctx.fillRect(leftMargin, y, barWidth, barHeight);
 
         if (value > 0) {
-          ctx.font = '9px "Helvetica"';
+          ctx.font = '9px "Arial", sans-serif';
           ctx.fillStyle = '#1f2937';
           ctx.textAlign = 'left';
           ctx.fillText(
@@ -160,7 +175,7 @@ export class AnalyticsService {
     ctx.moveTo(leftMargin, canvasHeight - bottomMargin);
     ctx.lineTo(leftMargin + maxBarWidth, canvasHeight - bottomMargin);
     ctx.stroke();
-    ctx.font = '10px "Helvetica"';
+    ctx.font = '10px "Arial", sans-serif';
     ctx.fillStyle = '#6b7280';
     ctx.textAlign = 'center';
     for (let i = 0; i <= xSteps; i++) {
@@ -173,13 +188,25 @@ export class AnalyticsService {
       );
     }
 
-    return canvas.toBuffer('image/png');
+    const buffer = canvas.toBuffer('image/png');
+    // Log para depuración (se verá en Vercel)
+    console.log('🎨 Canvas size:', width, canvasHeight);
+    console.log('🎨 Buffer size:', buffer.length);
+    return buffer;
   }
 
   async generarReportePDF(): Promise<Buffer> {
     const metrics = await this.prisma.metric.findMany({
       orderBy: [{ year: 'asc' }, { sede: 'asc' }, { mes: 'asc' }],
     });
+
+    // Logs para depuración
+    console.log('📊 Metrics count:', metrics.length);
+    if (metrics.length > 0) {
+      console.log('📊 Sample metric:', metrics[0]);
+    } else {
+      console.log('📊 No hay métricas en la base de datos');
+    }
 
     if (metrics.length === 0) {
       throw new Error('No hay métricas para generar el reporte');
@@ -237,7 +264,7 @@ export class AnalyticsService {
         0,
       );
 
-      // Calcular máximo redondeado como antes
+      // Calcular máximo redondeado como antes, evitando división por cero
       const maxValor = Math.max(
         ...bqAprovechamiento,
         ...bqRechazo,
@@ -246,7 +273,15 @@ export class AnalyticsService {
         1,
       );
       const stepSize = 20000;
-      const maxRedondeado = Math.ceil((maxValor * 1.15) / stepSize) * stepSize;
+      const maxRedondeado =
+        maxValor === 0
+          ? stepSize
+          : Math.ceil((maxValor * 1.15) / stepSize) * stepSize;
+
+      // Logs para depuración
+      console.log('📊 Barranquilla aprovechamiento:', bqAprovechamiento);
+      console.log('📊 Barranquilla rechazo:', bqRechazo);
+      console.log('📊 maxRedondeado:', maxRedondeado);
 
       // Generar buffers de los gráficos (ahora síncronos)
       const imageBufferBq = this.generarGraficoHorizontal(
@@ -327,7 +362,7 @@ export class AnalyticsService {
 
       const imgWidth = 350;
       // Calcular altura de la imagen en función del número de meses
-      const chartHeight = 80 + meses.length * 35; // estimación similar a la original
+      const chartHeight = 80 + meses.length * 35;
       const imgHeight = (imgWidth / 500) * chartHeight;
 
       doc.image(imageBufferBq, inicioX, 100, {
