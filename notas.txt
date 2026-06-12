@@ -4,4 +4,4 @@ cambiar los correos al desplegar, de solicitudes
 Cambiar correos de seguridad en produccion
 
 Hacer testeo
-Mirar si lo pasamos supabase
+Actualizar readme
