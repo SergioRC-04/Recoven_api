@@ -3,9 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { UpdateMetricDto } from './dto/update-metric.dto';
 import PDFDocument from 'pdfkit';
-import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
-import chartJsDataLabels from 'chartjs-plugin-datalabels';
 import { DeleteMetricDto } from './dto/delete-metric.dto';
+import { createCanvas } from '@napi-rs/canvas';
 
 // Función auxiliar para convertir el stream del PDF a Buffer
 function streamToBuffer(stream: PDFKit.PDFDocument): Promise<Buffer> {
@@ -55,6 +54,128 @@ export class AnalyticsService {
     }
   }
 
+  /**
+   * Genera un gráfico de barras horizontal usando @napi-rs/canvas.
+   * Es síncrono, no necesita async/await.
+   */
+  private generarGraficoHorizontal(
+    titulo: string,
+    labels: string[],
+    datasets: { label: string; data: number[]; backgroundColor: string }[],
+    maxValueRounded: number,
+  ): Buffer {
+    const width = 500;
+    const leftMargin = 100;
+    const rightMargin = 50;
+    const topMargin = 80;
+    const bottomMargin = 40;
+    const barHeight = 20;
+    const groupSpacing = 10;
+    const barSpacing = 4;
+
+    const numCategories = labels.length;
+    const totalGroupHeight =
+      barHeight * datasets.length + barSpacing * (datasets.length - 1);
+    const rowHeight = totalGroupHeight + groupSpacing;
+    const canvasHeight = topMargin + bottomMargin + numCategories * rowHeight;
+
+    const canvas = createCanvas(width, canvasHeight);
+    const ctx = canvas.getContext('2d');
+
+    // Fondo blanco
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, canvasHeight);
+
+    // Título centrado
+    ctx.font = 'bold 16px "Helvetica"';
+    ctx.fillStyle = '#111827';
+    ctx.textAlign = 'center';
+    ctx.fillText(titulo, width / 2, 30);
+
+    // Leyenda (esquina superior derecha)
+    const legendX = width - 150;
+    const legendY = 50;
+    ctx.font = '12px "Helvetica"';
+    ctx.textAlign = 'left';
+    for (let i = 0; i < datasets.length; i++) {
+      const ds = datasets[i];
+      ctx.fillStyle = ds.backgroundColor;
+      ctx.fillRect(legendX, legendY + i * 20, 15, 15);
+      ctx.fillStyle = '#000';
+      ctx.fillText(ds.label, legendX + 20, legendY + i * 20 + 12);
+    }
+
+    const maxBarWidth = width - leftMargin - rightMargin - 50; // espacio extra para números
+
+    // Dibujar cuadrícula vertical (opcional, similar a chart.js)
+    ctx.save();
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 0.5;
+    const xSteps = 5;
+    for (let i = 0; i <= xSteps; i++) {
+      const x = leftMargin + (i / xSteps) * maxBarWidth;
+      ctx.beginPath();
+      ctx.moveTo(x, topMargin - 10);
+      ctx.lineTo(x, canvasHeight - bottomMargin + 10);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Dibujar barras y etiquetas de meses
+    for (let catIndex = 0; catIndex < numCategories; catIndex++) {
+      const label = labels[catIndex];
+      const yBase = topMargin + catIndex * rowHeight;
+
+      // Etiqueta del mes (eje Y)
+      ctx.font = '12px "Helvetica"';
+      ctx.fillStyle = '#374151';
+      ctx.textAlign = 'right';
+      ctx.fillText(label, leftMargin - 10, yBase + totalGroupHeight / 2 + 6);
+
+      let yOffset = 0;
+      for (let dsIndex = 0; dsIndex < datasets.length; dsIndex++) {
+        const ds = datasets[dsIndex];
+        const value = ds.data[catIndex];
+        const barWidth = (value / maxValueRounded) * maxBarWidth;
+        const y = yBase + yOffset;
+        ctx.fillStyle = ds.backgroundColor;
+        ctx.fillRect(leftMargin, y, barWidth, barHeight);
+
+        if (value > 0) {
+          ctx.font = '9px "Helvetica"';
+          ctx.fillStyle = '#1f2937';
+          ctx.textAlign = 'left';
+          ctx.fillText(
+            value.toLocaleString('es-CO'),
+            leftMargin + barWidth + 5,
+            y + barHeight - 3,
+          );
+        }
+        yOffset += barHeight + barSpacing;
+      }
+    }
+
+    // Eje X y ticks
+    ctx.beginPath();
+    ctx.moveTo(leftMargin, canvasHeight - bottomMargin);
+    ctx.lineTo(leftMargin + maxBarWidth, canvasHeight - bottomMargin);
+    ctx.stroke();
+    ctx.font = '10px "Helvetica"';
+    ctx.fillStyle = '#6b7280';
+    ctx.textAlign = 'center';
+    for (let i = 0; i <= xSteps; i++) {
+      const value = (maxValueRounded / xSteps) * i;
+      const x = leftMargin + (i / xSteps) * maxBarWidth;
+      ctx.fillText(
+        value.toLocaleString('es-CO'),
+        x,
+        canvasHeight - bottomMargin + 15,
+      );
+    }
+
+    return canvas.toBuffer('image/png');
+  }
+
   async generarReportePDF(): Promise<Buffer> {
     const metrics = await this.prisma.metric.findMany({
       orderBy: [{ year: 'asc' }, { sede: 'asc' }, { mes: 'asc' }],
@@ -67,14 +188,7 @@ export class AnalyticsService {
     const yearsAvailable = [...new Set(metrics.map((m) => m.year))].sort(
       (a, b) => a - b,
     );
-
-    // Crear documento PDF
     const doc = new PDFDocument({ size: 'A4', margin: 0 });
-
-    const chartCallback = (ChartJS: any) => {
-      ChartJS.defaults.font.family = 'Helvetica';
-      ChartJS.register(chartJsDataLabels);
-    };
 
     for (let i = 0; i < yearsAvailable.length; i++) {
       const year = yearsAvailable[i];
@@ -123,98 +237,51 @@ export class AnalyticsService {
         0,
       );
 
-      const chartWidth = 500;
-      const chartHeight = Math.max(
-        330,
-        70 + meses.length * 22 + meses.length * 6,
+      // Calcular máximo redondeado como antes
+      const maxValor = Math.max(
+        ...bqAprovechamiento,
+        ...bqRechazo,
+        ...puertoAprovechamiento,
+        ...puertoRechazo,
+        1,
       );
-      const chartJSNodeCanvas = new ChartJSNodeCanvas({
-        width: chartWidth,
-        height: chartHeight,
-        chartCallback,
-      });
+      const stepSize = 20000;
+      const maxRedondeado = Math.ceil((maxValor * 1.15) / stepSize) * stepSize;
 
-      const crearConfiguracionGrafico = (
-        titulo: string,
-        aprovechamientoData: number[],
-        rechazoData: number[],
-      ) => {
-        const maxValor = Math.max(...aprovechamientoData, ...rechazoData);
-        const maxConMargen = maxValor * 1.15;
-        const stepSize = 20000;
-        const maxRedondeado = Math.ceil(maxConMargen / stepSize) * stepSize;
-
-        return {
-          type: 'bar' as const,
-          data: {
-            labels: meses,
-            datasets: [
-              {
-                label: 'Aprovechamiento (t)',
-                data: aprovechamientoData,
-                backgroundColor: '#10b981',
-              },
-              {
-                label: 'Rechazo (t)',
-                data: rechazoData,
-                backgroundColor: '#ef4444',
-              },
-            ],
+      // Generar buffers de los gráficos (ahora síncronos)
+      const imageBufferBq = this.generarGraficoHorizontal(
+        'BODEGA BARRANQUILLA - HISTÓRICO',
+        meses,
+        [
+          {
+            label: 'Aprovechamiento (t)',
+            data: bqAprovechamiento,
+            backgroundColor: '#10b981',
           },
-          options: {
-            responsive: false,
-            indexAxis: 'y' as const,
-            barPercentage: 0.8,
-            categoryPercentage: 0.85,
-            plugins: {
-              title: {
-                display: true,
-                text: titulo,
-                font: { size: 16, weight: 'bold' as const },
-                padding: 10,
-              },
-              legend: { position: 'top' as const },
-              datalabels: {
-                anchor: 'end' as const,
-                align: 'end' as const,
-                offset: 4,
-                formatter: (value: number) => value.toLocaleString('es-CO'),
-                font: { size: 9, weight: 'bold' as const },
-                color: '#1f2937',
-              },
-            },
-            scales: {
-              x: {
-                beginAtZero: true,
-                max: maxRedondeado,
-                grid: { color: '#e5e7eb' },
-                ticks: {
-                  callback: (value: number) => value.toLocaleString('es-CO'),
-                  stepSize: stepSize,
-                },
-              },
-              y: { grid: { display: false } },
-            },
+          { label: 'Rechazo (t)', data: bqRechazo, backgroundColor: '#ef4444' },
+        ],
+        maxRedondeado,
+      );
+
+      const imageBufferPuerto = this.generarGraficoHorizontal(
+        'BODEGA PUERTO COLOMBIA - HISTÓRICO',
+        meses,
+        [
+          {
+            label: 'Aprovechamiento (t)',
+            data: puertoAprovechamiento,
+            backgroundColor: '#10b981',
           },
-        };
-      };
-
-      const imageBufferBq = await chartJSNodeCanvas.renderToBuffer(
-        crearConfiguracionGrafico(
-          'BODEGA BARRANQUILLA - HISTÓRICO',
-          bqAprovechamiento,
-          bqRechazo,
-        ),
-      );
-      const imageBufferPuerto = await chartJSNodeCanvas.renderToBuffer(
-        crearConfiguracionGrafico(
-          'BODEGA PUERTO COLOMBIA - HISTÓRICO',
-          puertoAprovechamiento,
-          puertoRechazo,
-        ),
+          {
+            label: 'Rechazo (t)',
+            data: puertoRechazo,
+            backgroundColor: '#ef4444',
+          },
+        ],
+        maxRedondeado,
       );
 
-      // --- MAQUETACIÓN VISUAL ---
+      // --- MAQUETACIÓN VISUAL (idéntica a la original) ---
       doc.rect(0, 0, 150, 842).fill('#10b981');
       doc
         .fillColor('#ffffff')
@@ -259,13 +326,14 @@ export class AnalyticsService {
         .stroke();
 
       const imgWidth = 350;
-      const imgHeight = (imgWidth / chartWidth) * chartHeight;
+      // Calcular altura de la imagen en función del número de meses
+      const chartHeight = 80 + meses.length * 35; // estimación similar a la original
+      const imgHeight = (imgWidth / 500) * chartHeight;
 
       doc.image(imageBufferBq, inicioX, 100, {
         width: imgWidth,
         height: imgHeight,
       });
-
       const posicionGrafica2 = 100 + imgHeight + 25;
       doc.image(imageBufferPuerto, inicioX, posicionGrafica2, {
         width: imgWidth,
