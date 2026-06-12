@@ -1,5 +1,6 @@
 Cambiar la direccion de la imagen cuando se despliegue
 Revisar que respuestas http devolver
+cambiar los correos al desplegar, de solicitudes
 
 Hacer testeo
 Mirar si lo pasamos supabase

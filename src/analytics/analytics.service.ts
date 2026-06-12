@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { UpdateMetricDto } from './dto/update-metric.dto';
 import PDFDocument from 'pdfkit';
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
@@ -37,9 +38,21 @@ export class AnalyticsService {
 
   async deleteMetric(dto: DeleteMetricDto) {
     const { sede, mes, year } = dto;
-    return await this.prisma.metric.delete({
-      where: { sede_mes_year: { sede, mes, year } },
-    });
+    try {
+      return await this.prisma.metric.delete({
+        where: { sede_mes_year: { sede, mes, year } },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new NotFoundException(
+          `Métrica con sede "${sede}", mes "${mes}", año "${year}" no encontrada`,
+        );
+      }
+      throw error;
+    }
   }
 
   async generarReportePDF(): Promise<Buffer> {

@@ -1,6 +1,8 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
+import { Pool } from 'pg';
+import 'dotenv/config';
 
 @Injectable()
 export class PrismaService
@@ -8,13 +10,13 @@ export class PrismaService
   implements OnModuleInit, OnModuleDestroy
 {
   constructor() {
-    const adapter = new PrismaBetterSqlite3({
-      url: process.env.DATABASE_URL!,
-    });
+    // Crear el pool de conexiones usando la URL de tu archivo .env
+    const connectionString = process.env.DATABASE_URL!;
+    const pool = new Pool({ connectionString });
+    const adapter = new PrismaPg(pool);
 
-    super({
-      adapter,
-    });
+    // Pasar el adaptador al cliente de Prisma
+    super({ adapter });
   }
 
   async onModuleInit() {
