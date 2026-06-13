@@ -6,13 +6,14 @@ import {
   Body,
   Param,
   ParseUUIDPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
-// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'; // Descoméntalo si manejas Guards globales
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('customers')
-// @UseGuards(JwtAuthGuard) // Protege todos los endpoints de este controlador para que solo entren administradores logueados
+@UseGuards(JwtAuthGuard)
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 

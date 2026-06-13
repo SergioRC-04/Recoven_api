@@ -5,12 +5,15 @@ import {
   Body,
   UseInterceptors,
   UploadedFile,
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CertificatesService } from './certificates.service';
 import { UploadCertificateDto } from './dto/upload-certificate.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('certificates')
+@UseGuards(JwtAuthGuard)
 export class CertificatesController {
   constructor(private readonly certificatesService: CertificatesService) {}
 

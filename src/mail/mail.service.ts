@@ -23,22 +23,24 @@ export class MailService {
       mensaje,
     } = data;
 
+    // Guardar en Base de Datos
     await this.prisma.lead.create({
       data: {
-        nombre: data.nombre,
-        telefono: data.telefono,
-        email: data.email,
-        empresa: data.empresa,
-        direccion: data.direccion,
-        servicio: data.servicio,
-        especialidad: data.especialidad,
-        mensaje: data.mensaje,
+        nombre,
+        telefono,
+        email,
+        empresa,
+        direccion,
+        servicio,
+        especialidad,
+        mensaje,
       },
     });
 
+    // Enviar notificación al correo administrativo de RECOVEN
     await this.mailerService.sendMail({
-      to: 'srodriguezcabana@gmail.com',
-      from: 'srodriguezcabana+prueba@gmail.com',
+      to: process.env.MAIL_ADMIN_RECEIVER,
+      from: process.env.MAIL_FROM,
       subject: `🚨 Nueva Solicitud de Servicio: ${servicio}`,
       html: `
         <div style="font-family: 'Inter', sans-serif; color: #1f2937; max-width: 600px; line-height: 1.6;">
@@ -53,7 +55,7 @@ export class MailService {
           <p><strong>Tipo de Servicio:</strong> ${servicio}</p>
           <p><strong>Especialidad requerida:</strong> ${especialidad || 'Ninguna seleccionada'}</p>
           
-          <div style="background-color: #f3f4f6; padding: 15px; rounded: 8px; margin-top: 15px;">
+          <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin-top: 15px;">
             <strong>Detalles/Mensaje adicional:</strong><br/>
             ${mensaje || 'Sin comentarios adicionales.'}
           </div>
@@ -71,8 +73,8 @@ export class MailService {
 
   async sendSecurityCode(email: string, code: string) {
     await this.mailerService.sendMail({
-      to: email,
-      from: `"Seguridad RECOVEN" <srodriguezcabana+security@gmail.com>`,
+      to: email, // Correo del administrador que intenta loguearse
+      from: process.env.MAIL_FROM,
       subject: '🔒 Código de verificación de seguridad - RECOVEN',
       html: `
         <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; max-width: 500px;">
@@ -88,7 +90,6 @@ export class MailService {
     });
   }
 
-  // Método corregido: exporta los leads a Excel y devuelve un Buffer
   async exportLeadsToExcel(): Promise<Buffer> {
     const leads = await this.prisma.lead.findMany({
       orderBy: { createdAt: 'desc' },
@@ -132,8 +133,6 @@ export class MailService {
       });
     });
 
-    // writeBuffer devuelve Promise<Buffer> pero las definiciones de tipo pueden causar conflictos.
-    // Se aplica un cast doble para satisfacer a TypeScript.
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer as unknown as Buffer;
   }
@@ -158,8 +157,8 @@ export class MailService {
       : 'correspondiente a los proyectos corporativos especiales y de materiales diversos procesados en nuestras plantas de clasificación.';
 
     await this.mailerService.sendMail({
-      to: emailDestinatario,
-      from: `"Gestión Ambiental RECOVEN" <${process.env.MAIL_USER}>`,
+      to: emailDestinatario, // Cliente final
+      from: process.env.MAIL_FROM,
       subject: subject,
       html: `
         <div style="font-family: 'Inter', sans-serif; color: #1f2937; max-width: 600px; margin: 0 auto; line-height: 1.6; border: 1px solid #e5e7eb; border-radius: 8px; padding: 25px;">
@@ -200,7 +199,7 @@ export class MailService {
       attachments: [
         {
           filename: file.originalname,
-          content: file.buffer, // Mapea directamente el buffer de memoria de Multer
+          content: file.buffer,
         },
       ],
     });
