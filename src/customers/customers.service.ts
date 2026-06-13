@@ -43,8 +43,8 @@ export class CustomersService {
   }
 
   // 3. Eliminar una empresa por ID
-  async remove(id: string) {
-    // Verificar si la empresa existe antes de intentar borrarla
+  async remove(id: string): Promise<any> {
+    // 1. Verificar si la empresa existe antes de intentar borrarla
     const empresa = await this.prisma.empresasClientes.findUnique({
       where: { id },
     });
@@ -53,11 +53,29 @@ export class CustomersService {
       throw new NotFoundException('La empresa que intenta eliminar no existe.');
     }
 
-    // Nota de seguridad: Si la empresa ya tiene certificados asignados,
-    // Prisma lanzará un error de clave foránea (Foreign Key Restriction) automáticamente,
-    // protegiendo la integridad de tus datos.
-    return this.prisma.empresasClientes.delete({
+    // 2. 🟢 CORREGIDO: Ejecutamos con await y guardamos el resultado del borrado real
+    const resultadoBorrado = await this.prisma.empresasClientes.delete({
       where: { id },
+    });
+
+    // 3. Retornamos el resultado para confirmar que la promesa se resolvió con éxito
+    return resultadoBorrado;
+  }
+
+  async update(id: string, data: { nombre?: string; correo?: string }) {
+    // Validar si existe antes de actualizar
+    const existe = await this.prisma.empresasClientes.findUnique({
+      where: { id },
+    });
+    if (!existe) {
+      throw new NotFoundException(
+        'La empresa que intenta actualizar no existe.',
+      );
+    }
+
+    return this.prisma.empresasClientes.update({
+      where: { id },
+      data,
     });
   }
 }

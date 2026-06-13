@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Delete,
+  Put,
   Body,
   Param,
   ParseUUIDPipe,
@@ -34,6 +35,30 @@ export class CustomersController {
   async removeCustomer(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
   ) {
-    return this.customersService.remove(id);
+    // 1. 🟢 Obligamos al controlador a esperar la confirmación real de la base de datos
+    await this.customersService.remove(id);
+
+    // 2. Solo cuando la línea de arriba termine con éxito, respondemos al Frontend
+    return {
+      success: true,
+      message: 'Empresa eliminada correctamente.',
+    };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put(':id')
+  async updateCustomer(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() updateData: { nombre?: string; correo?: string },
+  ) {
+    const empresaActualizada = await this.customersService.update(
+      id,
+      updateData,
+    );
+    return {
+      success: true,
+      message: 'Empresa actualizada correctamente.',
+      data: empresaActualizada,
+    };
   }
 }
