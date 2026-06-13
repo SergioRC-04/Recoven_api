@@ -145,8 +145,8 @@ export class MailService {
   ) {
     const esPoda = tipo === 'PODA';
     const subject = esPoda
-      ? '🍃 Certificado de Disposición Final de Residuos de Poda - RECOVEN ECA'
-      : '🍃 Certificado de Disposición Final de Residuos Diversos - RECOVEN ECA';
+      ? ' Certificado de Disposición Final de Residuos de Poda - RECOVEN ECA'
+      : ' Certificado de Disposición Final de Residuos Diversos - RECOVEN ECA';
 
     const tituloCertificado = esPoda
       ? 'Certificado de Manejo y Disposición Final de Residuos Orgánicos Aprovechables'
