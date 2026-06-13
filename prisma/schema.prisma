@@ -47,3 +47,25 @@ model Lead {
   mensaje      String?  // Opcional
   createdAt    DateTime @default(now()) // Fecha de registro
 }
+
+model EmpresasClientes {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre        String         @unique @db.VarChar(150)
+  correo        String         @db.VarChar(100)
+  fechaCreacion DateTime       @default(now()) @map("fecha_creacion") @db.Timestamp(6)
+  certificados  Certificados[]
+
+  @@map("empresas_clientes")
+}
+
+model Certificados {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigoDescarga String           @unique @map("codigo_descarga") @db.VarChar(30)
+  empresaId      String           @map("empresa_id") @db.Uuid
+  tipo           String           @db.VarChar(20) // 'PODA' o 'RESIDUOS'
+  archivoUrl     String           @map("archivo_url") @db.VarChar(255)
+  fechaEnvio     DateTime         @default(now()) @map("fecha_envio") @db.Timestamp(6)
+  empresa        EmpresasClientes @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+
+  @@map("certificados")
+}
