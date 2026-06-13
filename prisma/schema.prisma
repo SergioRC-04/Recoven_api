@@ -59,13 +59,12 @@ model EmpresasClientes {
 }
 
 model Certificados {
-  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  codigoDescarga String           @unique @map("codigo_descarga") @db.VarChar(30)
-  empresaId      String           @map("empresa_id") @db.Uuid
-  tipo           String           @db.VarChar(20) // 'PODA' o 'RESIDUOS'
-  archivoUrl     String           @map("archivo_url") @db.VarChar(255)
-  fechaEnvio     DateTime         @default(now()) @map("fecha_envio") @db.Timestamp(6)
-  empresa        EmpresasClientes @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId     String           @map("empresa_id") @db.Uuid
+  tipo          String           @db.VarChar(20) // 'PODA' o 'RESIDUOS'
+  nombreArchivo String           @map("nombre_archivo") @db.VarChar(255) // Guarda el nombre original del archivo enviado
+  fechaEnvio    DateTime         @default(now()) @map("fecha_envio") @db.Timestamp(6)
+  empresa       EmpresasClientes @relation(fields: [empresaId], references: [id], onDelete: Restrict)
 
   @@map("certificados")
 }

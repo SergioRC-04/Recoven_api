@@ -137,4 +137,72 @@ export class MailService {
     const buffer = await workbook.xlsx.writeBuffer();
     return buffer as unknown as Buffer;
   }
+
+  async sendCertificateEmail(
+    emailDestinatario: string,
+    nombreEmpresa: string,
+    tipo: 'PODA' | 'RESIDUOS',
+    file: Express.Multer.File,
+  ) {
+    const esPoda = tipo === 'PODA';
+    const subject = esPoda
+      ? '🍃 Certificado de Disposición Final de Residuos de Poda - RECOVEN ECA'
+      : '🍃 Certificado de Disposición Final de Residuos Diversos - RECOVEN ECA';
+
+    const tituloCertificado = esPoda
+      ? 'Certificado de Manejo y Disposición Final de Residuos Orgánicos Aprovechables'
+      : 'Certificado de Manejo y Disposición Final de Residuos';
+
+    const parrafoDetalle = esPoda
+      ? 'correspondiente a las actividades de poda ejecutadas en las zonas de recolección autorizadas.'
+      : 'correspondiente a los proyectos corporativos especiales y de materiales diversos procesados en nuestras plantas de clasificación.';
+
+    await this.mailerService.sendMail({
+      to: emailDestinatario,
+      from: `"Gestión Ambiental RECOVEN" <${process.env.MAIL_USER}>`,
+      subject: subject,
+      html: `
+        <div style="font-family: 'Inter', sans-serif; color: #1f2937; max-width: 600px; margin: 0 auto; line-height: 1.6; border: 1px solid #e5e7eb; border-radius: 8px; padding: 25px;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <img src="https://landingpage-recoven.vercel.app/assets/img/logo.png" alt="RECOVEN Logo" style="width: 150px;" />
+          </div>
+          
+          <h2 style="color: #059669; border-bottom: 2px solid #f3f4f6; padding-bottom: 12px; font-size: 20px;">
+            Emisión de Certificado Ambiental Oficial
+          </h2>
+          
+          <p>Estimado equipo de <strong>${nombreEmpresa}</strong>,</p>
+          
+          <p>Cordial saludo por parte de <strong>RECOVEN ECA SAS ESP</strong>.</p>
+          
+          <p>Adjunto a este mensaje encontrará el <strong>${tituloCertificado}</strong> ${parrafoDetalle}</p>
+          
+          <div style="background-color: #f9fafb; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; font-size: 14px; color: #374151; font-weight: 500;">
+              ℹ️ El documento oficial firmado ha sido anexado directamente a este correo electrónico como archivo adjunto para su descarga y almacenamiento local.
+            </p>
+          </div>
+          
+          <p style="font-size: 14px; color: #6b7280;">
+            Agradecemos su confianza en nuestros servicios orientados al desarrollo de la economía circular, la transformación ecológica y la gestión ambiental responsable bajo el estricto cumplimiento de la normativa legal vigente.
+          </p>
+          
+          <br/>
+          <hr style="border: 0; border-top: 1px solid #e5e7eb;" />
+          
+          <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #9ca3af;">
+            <p style="margin: 0; font-weight: bold; color: #4b5563;">RECOVEN ECA SAS ESP</p>
+            <p style="margin: 4px 0 0 0;">Barranquilla, Atlántico, Colombia</p>
+            <p style="font-size: 11px; margin-top: 10px; color: #ca8a04;">⚠️ Por favor, no responda a este correo electrónico, es una notificación automatizada.</p>
+          </div>
+        </div>
+      `,
+      attachments: [
+        {
+          filename: file.originalname,
+          content: file.buffer, // Mapea directamente el buffer de memoria de Multer
+        },
+      ],
+    });
+  }
 }

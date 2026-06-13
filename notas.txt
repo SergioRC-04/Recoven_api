@@ -5,3 +5,4 @@ Cambiar correos de seguridad en produccion
 
 Hacer testeo
 Actualizar readme
+pasar el codigo a ingles
