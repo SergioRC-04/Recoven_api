@@ -41,7 +41,7 @@ export class MailService {
     await this.mailerService.sendMail({
       to: process.env.MAIL_ADMIN_RECEIVER,
       from: process.env.MAIL_FROM,
-      subject: `🚨 Nueva Solicitud de Servicio: ${servicio}`,
+      subject: `🔴 Nueva Solicitud de Servicio: ${servicio}`,
       html: `
         <div style="font-family: 'Inter', sans-serif; color: #1f2937; max-width: 600px; line-height: 1.6;">
           <h2 style="color: #059669; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">
