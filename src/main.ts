@@ -11,12 +11,8 @@ async function bootstrap() {
   // 1. Obtenemos el string de la variable de entorno
   const corsEnv = process.env.CORS_ORIGINS;
 
-  // 2. 🟢 BLINDAJE: Si la variable no existe o está vacía, NUNCA dejes el array vacío [].
-  // Le asignamos por defecto los entornos locales y de producción para que la app no muera.
-  const allowedOrigins =
-    corsEnv && corsEnv.trim() !== ''
-      ? corsEnv.split(',')
-      : ['https://recovenesp.com'];
+  // 2. Si existe, lo convertimos en Array con .split(','). Si no existe, usamos local por defecto.
+  const allowedOrigins = corsEnv ? corsEnv.split(',') : [];
 
   // 3. Pasamos el array directamente a la configuración de CORS
   app.enableCors({
@@ -26,8 +22,6 @@ async function bootstrap() {
   });
 
   app.useGlobalPipes(new ValidationPipe());
-
-  // 4. Hostinger inyecta de forma automática process.env.PORT, lo cual está perfecto aquí
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
