@@ -63,7 +63,7 @@ export class MailService {
           <br/>
           <hr style="border: 0; border-top: 1px solid #e5e7eb;" />
           <div style="text-align: center; margin-top: 15px;">
-            <img src="https://landingpage-recoven.vercel.app/assets/img/logo.png" alt="RECOVEN Logo" style="width: 140px;" />
+            <img src="https://recovenesp.com/assets/img/logo.png" alt="RECOVEN Logo" style="width: 140px;" />
             <p style="font-size: 11px; color: #9ca3af;">Este es un correo automático generado desde la Landing Page</p>
           </div>
         </div>
