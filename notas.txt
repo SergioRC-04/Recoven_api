@@ -1,7 +1,4 @@
-Cambiar la direccion de la imagen cuando se despliegue
 Revisar que respuestas http devolver
-cambiar los correos al desplegar, de solicitudes
-Cambiar correos de seguridad en produccion
 
 Hacer testeo
 Actualizar readme
