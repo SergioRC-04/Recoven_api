@@ -208,10 +208,6 @@ export class MailService {
                 ℹ️ El documento oficial firmado ha sido anexado directamente a este correo electrónico como archivo adjunto en formato digital para su descarga, auditoría y almacenamiento local corporativo.
               </p>
             </div>
-            
-            <p style="font-size: 14px; color: #4b5563;">
-              Nuestra organización certifica que los materiales recibidos han sido procesados e incorporados correctamente a las cadenas de valor autorizadas, mitigando el impacto de la huella de carbono y asegurando la trazabilidad del residuo según los decretos nacionales vigentes.
-            </p>
 
             <p style="font-size: 14px; color: #6b7280;">
               Agradecemos su confianza en nuestros servicios orientados al desarrollo de la economía circular, la transformación ecológica y la gestión ambiental responsable bajo el estricto cumplimiento de la normativa legal vigente de la República de Colombia.

@@ -14,11 +14,11 @@ datasource db {
 // Modelo para las estadísticas de los gráficos
 model Metric {
   id              Int      @id @default(autoincrement())
-  sede            String   // "BARRANQUILLA" o "PUERTO_COLOMBIA"
-  mes             String   // "Enero", "Febrero", "Marzo", "Abril"
-  year            Int      // Año de la métrica
-  aprovechamiento Float    // Toneladas de aprovechamiento
-  rechazo         Float    // Toneladas de rechazo
+  sede            String // "BARRANQUILLA" o "PUERTO_COLOMBIA"
+  mes             String // "Enero", "Febrero", "Marzo", "Abril"
+  year            Int // Año de la métrica
+  aprovechamiento Float // Toneladas de aprovechamiento
+  rechazo         Float // Toneladas de rechazo
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -27,11 +27,11 @@ model Metric {
 }
 
 model Admin {
-  id              Int       @id @default(autoincrement())
-  username        String    @unique
-  password        String    
-  email           String    // El correo donde llegará el código (ej: el de Don Luis o el tuyo)
-  twoFactorCode   String?   // Para guardar el código temporal de 6 dígitos
+  id               Int       @id @default(autoincrement())
+  username         String    @unique
+  password         String
+  email            String // El correo donde llegará el código (ej: el de Don Luis o el tuyo)
+  twoFactorCode    String? // Para guardar el código temporal de 6 dígitos
   twoFactorExpires DateTime? // Para controlar que expire en 5 minutos
 }
 
@@ -40,11 +40,11 @@ model Lead {
   nombre       String
   telefono     String
   email        String
-  empresa      String?  // Opcional
-  direccion    String?  // Opcional
+  empresa      String? // Opcional
+  direccion    String? // Opcional
   servicio     String
-  especialidad String?  // Opcional
-  mensaje      String?  // Opcional
+  especialidad String? // Opcional
+  mensaje      String? // Opcional
   createdAt    DateTime @default(now()) // Fecha de registro
 }
 
@@ -59,12 +59,14 @@ model EmpresasClientes {
 }
 
 model Certificados {
-  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  empresaId     String           @map("empresa_id") @db.Uuid
-  tipo          String           @db.VarChar(20) // 'PODA' o 'RESIDUOS'
-  nombreArchivo String           @map("nombre_archivo") @db.VarChar(255) // Guarda el nombre original del archivo enviado
-  fechaEnvio    DateTime         @default(now()) @map("fecha_envio") @db.Timestamp(6)
-  empresa       EmpresasClientes @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId     String   @map("empresa_id") @db.Uuid
+  tipo          String   @db.VarChar(20) // 'PODA' o 'RESIDUOS'
+  nombreArchivo String   @map("nombre_archivo") @db.VarChar(255)
+  urlArchivo    String?  @map("url_archivo") @db.VarChar(255)
+  fechaEnvio    DateTime @default(now()) @map("fecha_envio") @db.Timestamp(6)
+
+  empresa EmpresasClientes @relation(fields: [empresaId], references: [id], onDelete: Restrict)
 
   @@map("certificados")
 }

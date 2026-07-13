@@ -1,5 +1,10 @@
 Revisar que respuestas http devolver
 
+Corregir error en metrics
+
+Despues de un tiempo ver como se comporta el espacio de almacenamiento en ambas dbs, para ver si se puede optimizar usando solo una
+
+
 Hacer testeo
 Actualizar readme
 pasar el codigo a ingles
