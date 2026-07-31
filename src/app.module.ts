@@ -5,6 +5,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
 import { CustomersModule } from './customers/customers.module';
 import { CertificatesModule } from './certificates/certificates.module';
+// import { PqrsdfModule } from './pqrsdf/pqrsdf.module';
+import { LeadsModule } from './leads/leads.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { CertificatesModule } from './certificates/certificates.module';
     AuthModule,
     CustomersModule,
     CertificatesModule,
+    // PqrsdfModule,
+    LeadsModule,
   ],
 })
 export class AppModule {}

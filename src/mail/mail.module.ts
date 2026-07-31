@@ -1,8 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MailerModule } from '@nestjs-modules/mailer';
-import { MailController } from './mail.controller';
 import { MailService } from './mail.service';
-import { PrismaModule } from 'src/prisma/prisma.module';
 
 @Module({
   imports: [
@@ -20,9 +18,7 @@ import { PrismaModule } from 'src/prisma/prisma.module';
         from: process.env.MAIL_FROM || 'noreply@recoven.com',
       },
     }),
-    PrismaModule,
   ],
-  controllers: [MailController],
   providers: [MailService],
   exports: [MailService],
 })
