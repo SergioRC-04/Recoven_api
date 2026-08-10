@@ -90,13 +90,14 @@ export class CertificatesService {
       },
     });
 
-    // 4. Envío directo del Correo Electrónico adjuntando el buffer de memoria
+    // 4. Envío directo del Correo Electrónico pasando la URL pública para el QR
     try {
       await this.mailService.sendCertificateEmail(
         empresa.correo,
         empresa.nombre,
         dto.tipo,
         file,
+        urlArchivoPublica, // <-- NUEVO: Pasamos la URL pública de Supabase
       );
     } catch (error) {
       console.error(`Error enviando correo a ${empresa.correo}:`, error);

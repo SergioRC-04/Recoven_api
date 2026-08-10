@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
 import type { SentMessageInfo } from 'nodemailer';
+import * as QRCode from 'qrcode';
 
 @Injectable()
 export class MailService {
@@ -47,6 +48,7 @@ export class MailService {
     nombreEmpresa: string,
     tipo: 'PODA' | 'RESIDUOS',
     file: Express.Multer.File,
+    certificateUrl: string, // <-- Recibimos la URL de Supabase
   ) {
     const esPoda = tipo === 'PODA';
     const subject = esPoda
@@ -61,29 +63,38 @@ export class MailService {
       ? 'correspondiente a las actividades de poda ejecutadas en las zonas de recolección autorizadas.'
       : 'correspondiente a los proyectos corporativos especiales y de materiales diversos procesados en nuestras plantas de clasificación.';
 
-    // 1. 🟢 TEXTO PLANO RESPALDO (Elimina la penalización MIME_HTML_ONLY)
+    // 1. Generar la imagen del QR en un Buffer usando la URL de Supabase
+    const qrBuffer = await QRCode.toBuffer(certificateUrl, {
+      type: 'png',
+      width: 250,
+      margin: 2,
+      color: {
+        dark: '#059669', // Verde corporativo
+        light: '#FFFFFF',
+      },
+    });
+
+    // 2. Texto plano de respaldo
     const textoPlano = `
-    Estimado equipo de ${nombreEmpresa},
-    
-    Cordial saludo por parte de RECOVEN ECA SAS ESP.
-    
-    Adjunto a este mensaje encontrará el ${tituloCertificado} ${parrafoDetalle}
-    
-    El documento oficial firmado ha sido anexado directamente a este correo electrónico como archivo adjunto para su descarga y almacenamiento local.
-    
-    Agradecemos su confianza en nuestros servicios orientados al desarrollo de la economía circular, la transformación ecológica y la gestión ambiental responsable bajo el estricto cumplimiento de la normativa legal vigente.
-    
-    Atentamente,
-    RECOVEN ECA SAS ESP
-    Barranquilla, Atlántico, Colombia
-    Por favor, no responda a este correo electrónico, es una notificación automatizada.
+Estimado equipo de ${nombreEmpresa},
+
+Cordial saludo por parte de RECOVEN ECA SAS ESP.
+
+Adjunto a este mensaje encontrará el ${tituloCertificado} ${parrafoDetalle}
+
+Puede verificar y consultar el documento digital escaneando el código QR en el correo o ingresando directamente a:
+${certificateUrl}
+
+Atentamente,
+RECOVEN ECA SAS ESP
+Barranquilla, Atlántico, Colombia
   `;
 
     await this.mailerService.sendMail({
       to: emailDestinatario,
       from: process.env.MAIL_FROM,
       subject: subject,
-      text: textoPlano, // <-- 🟢 Inyectamos la versión en texto plano obligatoria
+      text: textoPlano,
       html: `
       <!DOCTYPE html>
       <html lang="es">
@@ -104,13 +115,29 @@ export class MailService {
             
             <p>Estimado equipo de <strong>${nombreEmpresa}</strong>,</p>
             
-            <p>Cordial saludo por parte de del equipo técnico y administrativo de <strong>RECOVEN ECA SAS ESP</strong>.</p>
+            <p>Cordial saludo por parte del equipo técnico y administrativo de <strong>RECOVEN ECA SAS ESP</strong>.</p>
             
             <p>De manera formal y en cumplimiento de los estándares operativos, adjunto a este mensaje encontrará el <strong>${tituloCertificado}</strong> ${parrafoDetalle}</p>
             
+            <!-- SECCIÓN DEL CÓDIGO QR -->
+            <div style="background-color: #f9fafb; border: 1px dashed #10b981; border-radius: 8px; padding: 20px; margin: 25px 0; text-align: center;">
+              <p style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold; color: #065f46;">
+                🔍 Verificación Digital con Código QR
+              </p>
+              <p style="margin: 0 0 15px 0; font-size: 12px; color: #4b5563;">
+                Escanee el siguiente código QR con la cámara de su dispositivo móvil para acceder al documento oficial guardado en nuestro servidor seguro:
+              </p>
+              <img src="cid:qrcode-certificate" alt="Código QR del Certificado" style="width: 180px; height: 180px; border-radius: 6px; border: 1px solid #e5e7eb; padding: 6px; background-color: #ffffff;" />
+              <p style="margin-top: 12px; font-size: 12px;">
+                <a href="${certificateUrl}" target="_blank" style="color: #059669; text-decoration: underline; font-weight: 500;">
+                  O haga clic aquí para abrir/descargar el certificado
+                </a>
+              </p>
+            </div>
+
             <div style="background-color: #f9fafb; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 4px;">
               <p style="margin: 0; font-size: 14px; color: #374151; font-weight: 500;">
-                ℹ️ El documento oficial firmado ha sido anexado directamente a este correo electrónico como archivo adjunto en formato digital para su descarga, auditoría y almacenamiento local corporativo.
+                ℹ️ El documento oficial firmado también ha sido anexado directamente como archivo adjunto a este correo electrónico.
               </p>
             </div>
 
@@ -134,7 +161,12 @@ export class MailService {
         {
           filename: file.originalname,
           content: file.buffer,
-          contentType: file.mimetype, // Mantén la protección del tipo MIME que pusimos antes
+          contentType: file.mimetype,
+        },
+        {
+          filename: 'qr-certificado.png',
+          content: qrBuffer,
+          cid: 'qrcode-certificate', // Referenciado como cid:qrcode-certificate en la etiqueta <img>
         },
       ],
     });
