@@ -5,7 +5,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
 import { CustomersModule } from './customers/customers.module';
 import { CertificatesModule } from './certificates/certificates.module';
-// import { PqrsdfModule } from './pqrsdf/pqrsdf.module';
+import { PqrsdfModule } from './pqrsdf/pqrsdf.module';
 import { LeadsModule } from './leads/leads.module';
 
 @Module({
@@ -16,7 +16,7 @@ import { LeadsModule } from './leads/leads.module';
     AuthModule,
     CustomersModule,
     CertificatesModule,
-    // PqrsdfModule,
+    PqrsdfModule,
     LeadsModule,
   ],
 })

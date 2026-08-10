@@ -70,3 +70,51 @@ model Certificados {
 
   @@map("certificados")
 }
+
+enum TipoPqrsdf {
+  PETICION
+  QUEJA
+  RECLAMO
+  SUGERENCIA
+  DENUNCIA
+  FELICITACION
+}
+
+enum EstadoPqrsdf {
+  RECIBIDO
+  EN_TRAMITE
+  RESUELTO
+  RECHAZADO
+}
+
+model Pqrsdf {
+  id                    String        @id @default(uuid())
+  radicado              String        @unique // Ejemplo: PQRS-202607-A1B2
+  tipo                  TipoPqrsdf
+  estado                EstadoPqrsdf  @default(RECIBIDO)
+  
+  // Datos del Peticionario
+  nombreCompleto        String
+  tipoIdentificacion    String        // CC, NIT, CE, Pasaporte
+  numeroIdentificacion  String
+  email                 String
+  telefono              String?
+  direccion             String?
+  
+  // Detalle de la solicitud
+  asunto                String
+  descripcion           String
+  urlArchivo            String?       // Documento adjunto cargado a Supabase
+  
+  // Respuesta o Seguimiento Interno
+  respuesta             String?
+  urlRespuesta          String?
+  fechaRespuesta        DateTime?
+  
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([radicado])
+  @@index([numeroIdentificacion])
+  @@map("pqrsdf")
+}
