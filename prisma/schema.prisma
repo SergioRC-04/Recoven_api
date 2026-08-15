@@ -1,15 +1,12 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider = "postgresql"
-}
+  extensions = [postgis]
+} 
 
 // Modelo para las estadísticas de los gráficos
 model Metric {
@@ -117,4 +114,46 @@ model Pqrsdf {
   @@index([radicado])
   @@index([numeroIdentificacion])
   @@map("pqrsdf")
+}
+
+model Localidades {
+  id            String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  objectId      Int                                    @map("object_id")
+  nombre        String                                 @db.VarChar(100)
+  identificador String                                 @unique @db.VarChar(10)
+  areaShape     Float?                                 @map("st_area_shape")
+  geom          Unsupported("geometry(Polygon, 9377)")?
+  barrios       Barrios[]
+
+  @@index([geom], type: Gist, map: "localidades_geom_idx")
+  @@map("localidades")
+}
+
+model Barrios {
+  id            String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  objectId      Int                                    @map("object_id")
+  identificador String                                 @db.VarChar(20)
+  nombre        String                                 @map("nombre_barrio") @db.VarChar(150)
+  nombrePieza   Int?                                   @map("nombre_pieza")
+  localidadCod  String                                 @map("localidad_cod") @db.VarChar(10)
+  observaciones String?                                @db.VarChar(100)
+  areaShape     Float?                                 @map("st_area_shape")
+  geom          Unsupported("geometry(Polygon, 9377)")?
+
+  localidadRel Localidades? @relation(fields: [localidadCod], references: [identificador])
+
+  @@index([geom], type: Gist, map: "barrios_geom_idx")
+  @@map("barrios")
+}
+
+model Vias {
+  id       String                                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  objectId Int                                            @map("object_id")
+  texto    String?                                        @db.VarChar(100)
+  abrTexto String?                                        @map("abr_texto") @db.VarChar(50)
+  shapeLen Float?                                         @map("shape_len")
+  geom     Unsupported("geometry(MultiLineString, 9377)")?
+
+  @@index([geom], type: Gist, map: "vias_geom_idx")
+  @@map("vias")
 }
