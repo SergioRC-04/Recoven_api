@@ -2,11 +2,20 @@ import { config } from 'dotenv';
 config();
 
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import helmet from 'helmet';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Necesario para que el ThrottlerGuard identifique la IP real del cliente
+  // cuando la app corre detrás de un proxy/CDN (Vercel, etc.)
+  app.set('trust proxy', 1);
+
+  // Cabeceras de seguridad HTTP estándar
+  app.use(helmet());
 
   const corsEnv = process.env.CORS_ORIGINS;
   const allowedOrigins = corsEnv ? corsEnv.split(',') : [];

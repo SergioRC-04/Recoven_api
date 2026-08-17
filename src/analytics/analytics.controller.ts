@@ -12,11 +12,13 @@ import { UpdateMetricDto } from './dto/update-metric.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import type { Response } from 'express';
 import { DeleteMetricDto } from './dto/delete-metric.dto';
+import { SkipThrottle } from '@nestjs/throttler';
 
 @Controller('metrics')
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
+  @SkipThrottle()
   @Get('')
   async getAllMetrics() {
     return await this.analyticsService.getMetrics();

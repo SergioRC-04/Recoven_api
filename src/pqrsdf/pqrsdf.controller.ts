@@ -17,6 +17,7 @@ import { CreatePqrsdfDto } from './dto/create-pqrsdf.dto';
 import { SearchPqrsdfDto } from './dto/search-pqrsdf.dto';
 import { UpdatePqrsdfStatusDto } from './dto/update-pqrsdf.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('pqrsdf')
 export class PqrsdfController {
@@ -34,6 +35,7 @@ export class PqrsdfController {
     return this.pqrsdfService.create(dto, file);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('consultar')
   @HttpCode(HttpStatus.OK)
   searchStatus(@Body() dto: SearchPqrsdfDto) {
