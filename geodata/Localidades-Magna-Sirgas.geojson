@@ -1652,7 +1652,7 @@
         "st_area(shape)": 19761244.095411438
       },
       "geometry": {
-        "type": "Polygon",
+        "type": "MultiPolygon",
         "coordinates": [
           [
             [

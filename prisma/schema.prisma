@@ -117,12 +117,12 @@ model Pqrsdf {
 }
 
 model Localidades {
-  id            String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  objectId      Int                                    @map("object_id")
-  nombre        String                                 @db.VarChar(100)
-  identificador String                                 @unique @db.VarChar(10)
-  areaShape     Float?                                 @map("st_area_shape")
-  geom          Unsupported("geometry(Polygon, 9377)")?
+  id            String                                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  objectId      Int                                         @map("object_id")
+  nombre        String                                      @db.VarChar(100)
+  identificador String                                      @unique @db.VarChar(10)
+  areaShape     Float?                                      @map("st_area_shape")
+  geom          Unsupported("geometry(MultiPolygon, 9377)")?
   barrios       Barrios[]
 
   @@index([geom], type: Gist, map: "localidades_geom_idx")
@@ -130,15 +130,15 @@ model Localidades {
 }
 
 model Barrios {
-  id            String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  objectId      Int                                    @map("object_id")
-  identificador String                                 @db.VarChar(20)
-  nombre        String                                 @map("nombre_barrio") @db.VarChar(150)
-  nombrePieza   Int?                                   @map("nombre_pieza")
-  localidadCod  String                                 @map("localidad_cod") @db.VarChar(10)
-  observaciones String?                                @db.VarChar(100)
-  areaShape     Float?                                 @map("st_area_shape")
-  geom          Unsupported("geometry(Polygon, 9377)")?
+  id            String                                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  objectId      Int                                         @map("object_id")
+  identificador String                                      @db.VarChar(20)
+  nombre        String                                      @map("nombre_barrio") @db.VarChar(150)
+  nombrePieza   Int?                                        @map("nombre_pieza")
+  localidadCod  String                                      @map("localidad_cod") @db.VarChar(10)
+  observaciones String?                                     @db.VarChar(100)
+  areaShape     Float?                                      @map("st_area_shape")
+  geom          Unsupported("geometry(MultiPolygon, 9377)")?
 
   localidadRel Localidades? @relation(fields: [localidadCod], references: [identificador])
 

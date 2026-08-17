@@ -7,6 +7,7 @@ import { CustomersModule } from './customers/customers.module';
 import { CertificatesModule } from './certificates/certificates.module';
 import { PqrsdfModule } from './pqrsdf/pqrsdf.module';
 import { LeadsModule } from './leads/leads.module';
+import { GeoTerritorioModule } from './geo-territorio/geo-territorio.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { LeadsModule } from './leads/leads.module';
     CertificatesModule,
     PqrsdfModule,
     LeadsModule,
+    GeoTerritorioModule,
   ],
 })
 export class AppModule {}
