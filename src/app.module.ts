@@ -10,6 +10,8 @@ import { CertificatesModule } from './certificates/certificates.module';
 import { PqrsdfModule } from './pqrsdf/pqrsdf.module';
 import { LeadsModule } from './leads/leads.module';
 import { GeoTerritorioModule } from './geo-territorio/geo-territorio.module';
+import { MicrorrutasModule } from './microrrutas/microrrutas.module';
+import { RecyclersModule } from './recyclers/recyclers.module';
 
 @Module({
   imports: [
@@ -31,6 +33,8 @@ import { GeoTerritorioModule } from './geo-territorio/geo-territorio.module';
     PqrsdfModule,
     LeadsModule,
     GeoTerritorioModule,
+    MicrorrutasModule,
+    RecyclersModule,
   ],
   providers: [
     {
