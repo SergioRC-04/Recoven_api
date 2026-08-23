@@ -2,16 +2,21 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Body,
   Param,
   Query,
   ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { RecyclersService } from './recyclers.service';
 import { CreateRecyclerDto } from './dto/create-recycler.dto';
+import { UpdateRecyclerDto } from './dto/update-recycler.dto';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('/recyclers')
 export class RecyclersController {
   constructor(private readonly recyclersService: RecyclersService) {}
@@ -32,6 +37,14 @@ export class RecyclersController {
     return this.recyclersService.create(dto);
   }
 
+  @Put(':id')
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateRecyclerDto,
+  ) {
+    return this.recyclersService.update(id, dto);
+  }
+
   @Patch(':id/toggle-censo')
   toggleCenso(@Param('id', ParseIntPipe) id: number) {
     return this.recyclersService.toggleCenso(id);
@@ -40,5 +53,10 @@ export class RecyclersController {
   @Delete(':id')
   softDelete(@Param('id', ParseIntPipe) id: number) {
     return this.recyclersService.softDelete(id);
+  }
+
+  @Patch(':id/reactivar')
+  reactivate(@Param('id', ParseIntPipe) id: number) {
+    return this.recyclersService.reactivate(id);
   }
 }

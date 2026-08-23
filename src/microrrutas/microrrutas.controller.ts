@@ -9,9 +9,14 @@ import {
   Param,
   Query,
   ParseIntPipe,
+  UseGuards,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { MicrorrutasService } from './microrrutas.service';
 import { CreateMicrorrutaDto } from './dto/create-microrruta.dto';
+import { UpdateMicrorrutaDto } from './dto/update-microrruta.dto';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
 @Controller('/microrrutas')
 export class MicrorrutasController {
@@ -25,11 +30,22 @@ export class MicrorrutasController {
     return this.microrrutasService.findAll({ barrioCod, localidadCod });
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post()
   create(@Body() dto: CreateMicrorrutaDto) {
     return this.microrrutasService.create(dto);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Put(':id')
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateMicrorrutaDto,
+  ) {
+    return this.microrrutasService.update(id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Put(':id/geometria')
   updateGeom(
     @Param('id', ParseIntPipe) id: number,
@@ -38,8 +54,31 @@ export class MicrorrutasController {
     return this.microrrutasService.updateGeom(id, geojson);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.microrrutasService.delete(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('exportar-excel')
+  async exportarExcel(
+    @Query('barrioCod') barrioCod: string | undefined,
+    @Query('localidadCod') localidadCod: string | undefined,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.microrrutasService.exportarExcel({
+      barrioCod,
+      localidadCod,
+    });
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="microrrutas.xlsx"',
+    );
+    res.send(buffer);
   }
 }

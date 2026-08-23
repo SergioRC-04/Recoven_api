@@ -132,7 +132,7 @@ model Localidades {
 model Barrios {
   id            String                                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   objectId      Int                                         @map("object_id")
-  identificador String                                      @db.VarChar(20)
+  identificador String                                      @unique @db.VarChar(20) // Agregado @unique para soportar la relación
   nombre        String                                      @map("nombre_barrio") @db.VarChar(150)
   nombrePieza   Int?                                        @map("nombre_pieza")
   localidadCod  String                                      @map("localidad_cod") @db.VarChar(10)
@@ -140,7 +140,8 @@ model Barrios {
   areaShape     Float?                                      @map("st_area_shape")
   geom          Unsupported("geometry(MultiPolygon, 9377)")?
 
-  localidadRel Localidades? @relation(fields: [localidadCod], references: [identificador])
+  localidadRel Localidades?      @relation(fields: [localidadCod], references: [identificador])
+  recyclers    RecyclerBarrio[] // Relación opuesta agregada
 
   @@index([geom], type: Gist, map: "barrios_geom_idx")
   @@map("barrios")
@@ -232,8 +233,9 @@ model RecyclerMicrorruta {
 
 model RecyclerBarrio {
   recyclerId Int      @map("recycler_id")
-  barrioId   String   @map("barrio_id") // Código del barrio
+  barrioId   String   @map("barrio_id")
   recycler   Recycler @relation(fields: [recyclerId], references: [id], onDelete: Cascade)
+  barrio     Barrios  @relation(fields: [barrioId], references: [identificador], onDelete: Cascade) // Relación agregada
 
   @@id([recyclerId, barrioId])
   @@map("recycler_barrio")

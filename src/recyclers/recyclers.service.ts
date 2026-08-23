@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRecyclerDto } from './dto/create-recycler.dto';
+import { UpdateRecyclerDto } from './dto/update-recycler.dto';
 import {
-  Prisma,
   EstadoVinculacion,
   ClasificacionRecycler,
+  Prisma,
 } from '@prisma/client';
 
 @Injectable()
@@ -18,57 +19,80 @@ export class RecyclersService {
   }) {
     const { tab, censado, search } = filters;
 
+    const andConditions: Prisma.RecyclerWhereInput[] = [];
+
     if (tab === 'desvinculados') {
-      return this.prisma.recycler.findMany({
-        where: {
-          OR: [
-            { estadoVinculacion: EstadoVinculacion.INACTIVO },
-            { deletedAt: { not: null } },
-          ],
-        },
-        include: {
-          barrios: true,
-          microrrutas: { include: { microrruta: true } },
-        },
+      andConditions.push({
+        OR: [
+          { estadoVinculacion: EstadoVinculacion.INACTIVO },
+          { deletedAt: { not: null } },
+        ],
+      });
+    } else {
+      andConditions.push({
+        deletedAt: null,
+        estadoVinculacion: EstadoVinculacion.ACTIVO,
+      });
+
+      if (tab === 'con_ruta') andConditions.push({ microrrutas: { some: {} } });
+      if (tab === 'sin_ruta') andConditions.push({ microrrutas: { none: {} } });
+      if (tab === 'nuevos')
+        andConditions.push({ clasificacion: ClasificacionRecycler.NUEVO });
+      if (tab === 'a_quitar')
+        andConditions.push({ clasificacion: ClasificacionRecycler.A_QUITAR });
+    }
+
+    if (censado !== undefined) {
+      andConditions.push({ censado });
+    }
+
+    if (search) {
+      andConditions.push({
+        OR: [
+          { nombreCompleto: { contains: search, mode: 'insensitive' } },
+          { cedula: { contains: search } },
+        ],
       });
     }
 
-    // Tipado estricto usando el tipo generado por Prisma
-    const where: Prisma.RecyclerWhereInput = {
-      deletedAt: null,
-      estadoVinculacion: EstadoVinculacion.ACTIVO,
-    };
+    const where: Prisma.RecyclerWhereInput =
+      andConditions.length > 0 ? { AND: andConditions } : {};
 
-    if (censado !== undefined) where.censado = censado;
-
-    if (search) {
-      where.OR = [
-        { nombreCompleto: { contains: search, mode: 'insensitive' } },
-        { cedula: { contains: search } },
-      ];
-    }
-
-    if (tab === 'con_ruta') {
-      where.microrrutas = { some: {} };
-    } else if (tab === 'sin_ruta') {
-      where.microrrutas = { none: {} };
-    } else if (tab === 'nuevos') {
-      where.clasificacion = ClasificacionRecycler.NUEVO;
-    } else if (tab === 'a_quitar') {
-      where.clasificacion = ClasificacionRecycler.A_QUITAR;
-    }
-
-    return this.prisma.recycler.findMany({
+    const recyclers = await this.prisma.recycler.findMany({
       where,
       include: {
-        barrios: true,
+        barrios: {
+          include: {
+            barrio: { select: { nombre: true } },
+          },
+        },
         microrrutas: {
-          select: {
+          include: {
             microrruta: { select: { id: true, nombre: true } },
           },
         },
       },
+      orderBy: { updatedAt: 'desc' },
     });
+
+    return recyclers.map((r) => ({
+      id: r.id,
+      cedula: r.cedula,
+      nombreCompleto: r.nombreCompleto,
+      censado: r.censado,
+      clasificacion: r.clasificacion,
+      estadoVinculacion: r.estadoVinculacion,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      barrios: r.barrios.map((b) => ({
+        barrioId: b.barrioId,
+        nombreBarrio: b.barrio?.nombre ?? '',
+      })),
+      microrrutas: r.microrrutas.map((m) => ({
+        id: m.microrruta.id,
+        nombre: m.microrruta.nombre,
+      })),
+    }));
   }
 
   async create(dto: CreateRecyclerDto) {
@@ -91,11 +115,45 @@ export class RecyclersService {
     });
   }
 
+  async update(id: number, dto: UpdateRecyclerDto) {
+    const { barriosIds, microrrutasIds, ...data } = dto;
+
+    return this.prisma.$transaction(async (tx) => {
+      if (barriosIds !== undefined) {
+        await tx.recyclerBarrio.deleteMany({ where: { recyclerId: id } });
+        if (barriosIds.length > 0) {
+          await tx.recyclerBarrio.createMany({
+            data: barriosIds.map((bId) => ({ recyclerId: id, barrioId: bId })),
+          });
+        }
+      }
+
+      if (microrrutasIds !== undefined) {
+        await tx.recyclerMicrorruta.deleteMany({ where: { recyclerId: id } });
+        if (microrrutasIds.length > 0) {
+          await tx.recyclerMicrorruta.createMany({
+            data: microrrutasIds.map((mId) => ({
+              recyclerId: id,
+              microrrutaId: mId,
+            })),
+          });
+        }
+      }
+
+      return tx.recycler.update({
+        where: { id },
+        data,
+      });
+    });
+  }
+
   async toggleCenso(id: number) {
     const recycler = await this.prisma.recycler.findUnique({ where: { id } });
+    if (!recycler) throw new NotFoundException('Reciclador no encontrado');
+
     return this.prisma.recycler.update({
       where: { id },
-      data: { censado: !recycler?.censado },
+      data: { censado: !recycler.censado },
     });
   }
 
@@ -105,6 +163,19 @@ export class RecyclersService {
       data: {
         estadoVinculacion: EstadoVinculacion.INACTIVO,
         deletedAt: new Date(),
+      },
+    });
+  }
+
+  async reactivate(id: number) {
+    const recycler = await this.prisma.recycler.findUnique({ where: { id } });
+    if (!recycler) throw new NotFoundException('Reciclador no encontrado');
+
+    return this.prisma.recycler.update({
+      where: { id },
+      data: {
+        estadoVinculacion: EstadoVinculacion.ACTIVO,
+        deletedAt: null,
       },
     });
   }
