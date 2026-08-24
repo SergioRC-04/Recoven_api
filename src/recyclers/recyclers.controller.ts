@@ -10,11 +10,19 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { RecyclersService } from './recyclers.service';
 import { CreateRecyclerDto } from './dto/create-recycler.dto';
 import { UpdateRecyclerDto } from './dto/update-recycler.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import {
+  generarExcelRecyclers,
+  parseTipoExportRecyclers,
+  mapearTipoAFiltrosFindAll,
+} from './utils/recyclers-export.util';
+import { generarCertificadoPdf } from './utils/recycler-certificado.util';
 
 @UseGuards(JwtAuthGuard)
 @Controller('/recyclers')
@@ -58,5 +66,49 @@ export class RecyclersController {
   @Patch(':id/reactivar')
   reactivate(@Param('id', ParseIntPipe) id: number) {
     return this.recyclersService.reactivate(id);
+  }
+
+  @Get('exportar')
+  async exportar(
+    @Query('tipo') tipoRaw: string | undefined,
+    @Res() res: Response,
+  ) {
+    const tipo = parseTipoExportRecyclers(tipoRaw);
+    const filtros = mapearTipoAFiltrosFindAll(tipo);
+    const recyclers = await this.recyclersService.findAll(filtros);
+    const buffer = await generarExcelRecyclers(recyclers, tipo);
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="recicladores-${tipo}.xlsx"`,
+    );
+    res.send(buffer);
+  }
+
+  @Get(':id/certificado')
+  async descargarCertificado(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    const recycler = await this.recyclersService.findOne(id);
+    const doc = generarCertificadoPdf({
+      nombreCompleto: recycler.nombreCompleto,
+      cedula: recycler.cedula,
+      clasificacion: recycler.clasificacion,
+      censado: recycler.censado,
+      fechaVinculacion: recycler.createdAt,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="certificado-${recycler.cedula}.pdf"`,
+    );
+    doc.pipe(res);
+    doc.end();
   }
 }

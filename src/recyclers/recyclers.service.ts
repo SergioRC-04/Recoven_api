@@ -68,11 +68,13 @@ export class RecyclersService {
         },
         microrrutas: {
           include: {
-            microrruta: { select: { id: true, nombre: true } },
+            microrruta: {
+              select: { id: true, nombre: true, diasFrecuencia: true },
+            },
           },
         },
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { nombreCompleto: 'asc' },
     });
 
     return recyclers.map((r) => ({
@@ -82,6 +84,7 @@ export class RecyclersService {
       censado: r.censado,
       clasificacion: r.clasificacion,
       estadoVinculacion: r.estadoVinculacion,
+      deletedAt: r.deletedAt,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
       barrios: r.barrios.map((b) => ({
@@ -91,6 +94,7 @@ export class RecyclersService {
       microrrutas: r.microrrutas.map((m) => ({
         id: m.microrruta.id,
         nombre: m.microrruta.nombre,
+        diasFrecuencia: m.microrruta.diasFrecuencia,
       })),
     }));
   }
@@ -178,5 +182,20 @@ export class RecyclersService {
         deletedAt: null,
       },
     });
+  }
+  async findOne(id: number) {
+    const recycler = await this.prisma.recycler.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        cedula: true,
+        nombreCompleto: true,
+        censado: true,
+        clasificacion: true,
+        createdAt: true,
+      },
+    });
+    if (!recycler) throw new NotFoundException('Reciclador no encontrado');
+    return recycler;
   }
 }
