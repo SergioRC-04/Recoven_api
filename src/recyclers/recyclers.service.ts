@@ -96,6 +96,7 @@ export class RecyclersService {
         nombre: m.microrruta.nombre,
         diasFrecuencia: m.microrruta.diasFrecuencia,
       })),
+      fechaIngreso: r.fechaIngreso,
     }));
   }
 
@@ -105,6 +106,9 @@ export class RecyclersService {
     return this.prisma.recycler.create({
       data: {
         ...data,
+        fechaIngreso: data.fechaIngreso
+          ? new Date(data.fechaIngreso)
+          : new Date('2025-01-01'),
         barrios: barriosIds
           ? {
               create: barriosIds.map((bId) => ({ barrioId: bId })),
@@ -146,7 +150,12 @@ export class RecyclersService {
 
       return tx.recycler.update({
         where: { id },
-        data,
+        data: {
+          ...data,
+          ...(data.fechaIngreso && {
+            fechaIngreso: new Date(data.fechaIngreso),
+          }),
+        },
       });
     });
   }
@@ -193,6 +202,7 @@ export class RecyclersService {
         censado: true,
         clasificacion: true,
         createdAt: true,
+        fechaIngreso: true,
       },
     });
     if (!recycler) throw new NotFoundException('Reciclador no encontrado');

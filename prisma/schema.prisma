@@ -185,6 +185,7 @@ model Recycler {
   deletedAt          DateTime?             @map("deleted_at")
   createdAt          DateTime              @default(now()) @map("created_at")
   updatedAt          DateTime              @updatedAt @map("updated_at")
+  fechaIngreso    DateTime         @default(dbgenerated("'2026-01-01'::timestamp")) @map("fecha_ingreso")
 
   // Relaciones
   microrrutas RecyclerMicrorruta[]

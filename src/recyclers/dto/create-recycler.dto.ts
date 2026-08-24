@@ -29,4 +29,8 @@ export class CreateRecyclerDto {
   @IsOptional()
   @IsArray()
   microrrutasIds?: number[];
+
+  @IsOptional()
+  @IsString()
+  fechaIngreso?: string; // ISO string, el front envía "YYYY-MM-DD"
 }

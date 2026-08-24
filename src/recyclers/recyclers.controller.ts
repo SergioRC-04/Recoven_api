@@ -100,7 +100,7 @@ export class RecyclersController {
       cedula: recycler.cedula,
       clasificacion: recycler.clasificacion,
       censado: recycler.censado,
-      fechaVinculacion: recycler.createdAt,
+      fechaVinculacion: recycler.fechaIngreso,
     });
 
     res.setHeader('Content-Type', 'application/pdf');
