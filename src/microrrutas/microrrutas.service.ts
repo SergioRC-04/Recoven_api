@@ -4,6 +4,7 @@ import { CreateMicrorrutaDto } from './dto/create-microrruta.dto';
 import { Prisma } from '@prisma/client';
 import { UpdateMicrorrutaDto } from './dto/update-microrruta.dto';
 import * as ExcelJS from 'exceljs';
+import { GeoJsonFeatureCollection } from 'src/geo-territorio/dto/geo-territorio.dto';
 
 function formatearFechaDDMMYYYY(fecha: Date | string): string {
   const d = new Date(fecha);
@@ -30,12 +31,18 @@ export class MicrorrutasService {
     return geojson;
   }
 
-  // Consulta con transformación a EPSG:4326 para el mapa
-  async findAll(params: { barrioCod?: string; localidadCod?: string }) {
-    // Cada fragmento se arma con el tagged template Prisma.sql, que parametriza
-    // los valores en vez de concatenarlos como texto — esto es lo que cierra
-    // la inyección: params.barrioCod/localidadCod nunca tocan la query como
-    // string, viajan como parámetros reales, sin importar qué contengan.
+  // Construye los JOIN/WHERE de filtro espacial (barrio y/o localidad),
+  // compartido entre findAll (mapa/tabla, geometría en 4326) y
+  // exportarCapaGeoJson (GIS, geometría nativa en 9377) — así el filtro se
+  // mantiene idéntico en los dos casos sin duplicar la lógica.
+  // Cada fragmento se arma con el tagged template Prisma.sql, que
+  // parametriza los valores en vez de concatenarlos como texto — esto es
+  // lo que cierra la inyección: params.barrioCod/localidadCod nunca tocan
+  // la query como string, viajan como parámetros reales.
+  private construirFiltroEspacial(params: {
+    barrioCod?: string;
+    localidadCod?: string;
+  }): { joinClause: Prisma.Sql; whereClause: Prisma.Sql } {
     const joins: Prisma.Sql[] = [];
     const whereConditions: Prisma.Sql[] = [];
 
@@ -53,15 +60,19 @@ export class MicrorrutasService {
       );
     }
 
-    const joinClause =
-      joins.length > 0 ? Prisma.join(joins, ' ') : Prisma.sql``;
-    const whereClause =
-      whereConditions.length > 0
-        ? Prisma.sql`WHERE ${Prisma.join(whereConditions, ' AND ')}`
-        : Prisma.sql``;
+    return {
+      joinClause: joins.length > 0 ? Prisma.join(joins, ' ') : Prisma.sql``,
+      whereClause:
+        whereConditions.length > 0
+          ? Prisma.sql`WHERE ${Prisma.join(whereConditions, ' AND ')}`
+          : Prisma.sql``,
+    };
+  }
 
-    // $queryRaw (no Unsafe) — los fragmentos Prisma.sql anidados arriba se
-    // combinan de forma segura dentro de este template.
+  // Consulta con transformación a EPSG:4326 para el mapa
+  async findAll(params: { barrioCod?: string; localidadCod?: string }) {
+    const { joinClause, whereClause } = this.construirFiltroEspacial(params);
+
     return this.prisma.$queryRaw`
     SELECT DISTINCT ON (m.id)
       m.id, m.nombre, m.tipo, m.fecha_operacion, m.dir_inicio, m.hora_inicio,
@@ -185,7 +196,7 @@ export class MicrorrutasService {
     const sheet = workbook.addWorksheet('Microrrutas');
 
     // Encabezados: números puros (1 a 13), tal como exige el formato del
-    // reporte de microrrutas del SUI — no son nombres de columna descriptivos.
+    // reporte de microrrutas del SUI — no son nombres de columna descriptivas.
     sheet.columns = [
       { header: '1', key: 'c1', width: 16 },
       { header: '2', key: 'c2', width: 6 },
@@ -223,5 +234,59 @@ export class MicrorrutasService {
 
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);
+  }
+
+  // Igual que findAll en cuanto a filtros (misma construirFiltroEspacial),
+  // pero para exportar a QGIS/ArcGIS: geometría nativa en EPSG:9377 (sin
+  // ST_Transform), sin el cálculo de longitud (no aplica a un archivo GIS), y
+  // con los 13 campos del reporte SUI completos como atributos.
+  async exportarCapaGeoJson(params: {
+    barrioCod?: string;
+    localidadCod?: string;
+  }) {
+    const { joinClause, whereClause } = this.construirFiltroEspacial(params);
+
+    const rows = await this.prisma.$queryRaw<Array<{ geojson: string }>>`
+    SELECT json_build_object(
+      'type', 'FeatureCollection',
+      'features', COALESCE(json_agg(
+        json_build_object(
+          'type', 'Feature',
+          'id', sub.id,
+          'properties', json_build_object(
+            'id', sub.id,
+            'nombre', sub.nombre,
+            'tipo', sub.tipo,
+            'fechaOperacion', sub.fecha_operacion,
+            'dirInicio', sub.dir_inicio,
+            'horaInicio', sub.hora_inicio,
+            'dirFin', sub.dir_fin,
+            'horaFin', sub.hora_fin,
+            'distPavimentada', sub.dist_pavimentada,
+            'distNoPavimentada', sub.dist_no_pavimentada,
+            'frecuencia', sub.frecuencia,
+            'diasFrecuencia', sub.dias_frecuencia,
+            'estacionTransferencia', sub.estacion_transferencia,
+            'tipoBarrido', sub.tipo_barrido,
+            'estado', sub.estado
+          ),
+          'geometry', ST_AsGeoJSON(sub.geom)::json
+        )
+      ), '[]'::json)
+    )::text AS geojson
+    FROM (
+      SELECT DISTINCT ON (m.id)
+        m.id, m.nombre, m.tipo, m.fecha_operacion, m.dir_inicio, m.hora_inicio,
+        m.dir_fin, m.hora_fin, m.dist_pavimentada, m.dist_no_pavimentada,
+        m.frecuencia, m.dias_frecuencia, m.estacion_transferencia, m.tipo_barrido,
+        m.estado, m.geom
+      FROM microrrutas m
+      ${joinClause}
+      ${whereClause}
+      ORDER BY m.id
+    ) sub;
+  `;
+
+    return JSON.parse(rows[0].geojson) as GeoJsonFeatureCollection;
   }
 }

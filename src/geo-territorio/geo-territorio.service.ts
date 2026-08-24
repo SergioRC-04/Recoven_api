@@ -133,4 +133,115 @@ export class GeoTerritorioService {
       );
     }
   }
+  /**
+   * Igual que getLocalidadesGeoJson, pero sin reproyectar — se usa para
+   * exportar (GeoJSON/Shapefile), donde se quiere la geometría nativa en
+   * EPSG:9377, no la 4326 que consume el mapa interactivo.
+   */
+  async getLocalidadesGeoJsonNativo() {
+    try {
+      const result = await this.prisma.$queryRaw<Array<{ geojson: string }>>`
+      SELECT json_build_object(
+        'type', 'FeatureCollection',
+        'features', COALESCE(json_agg(
+          json_build_object(
+            'type', 'Feature',
+            'id', id,
+            'properties', json_build_object(
+              'id', id,
+              'nombre', nombre,
+              'identificador', identificador,
+              'areaShape', st_area_shape
+            ),
+            'geometry', ST_AsGeoJSON(geom)::json
+          )
+        ), '[]'::json)
+      )::text AS geojson
+      FROM localidades;
+    `;
+      return JSON.parse(result[0].geojson) as GeoJsonFeatureCollection;
+    } catch (error: unknown) {
+      throw new InternalServerErrorException(
+        'Error al obtener el GeoJSON nativo de localidades',
+        error instanceof Error ? error.message : 'Error desconocido',
+      );
+    }
+  }
+
+  async getBarriosGeoJsonNativo(filters: FilterBarriosDto) {
+    try {
+      const { localidadCod } = filters;
+      const result = await this.prisma.$queryRaw<Array<{ geojson: string }>>`
+      SELECT json_build_object(
+        'type', 'FeatureCollection',
+        'features', COALESCE(json_agg(
+          json_build_object(
+            'type', 'Feature',
+            'id', id,
+            'properties', json_build_object(
+              'id', id,
+              'nombre', nombre_barrio,
+              'identificador', identificador,
+              'localidadCod', localidad_cod,
+              'observaciones', observaciones,
+              'areaShape', st_area_shape
+            ),
+            'geometry', ST_AsGeoJSON(geom)::json
+          )
+        ), '[]'::json)
+      )::text AS geojson
+      FROM barrios
+      WHERE (${localidadCod}::text IS NULL OR localidad_cod = ${localidadCod});
+    `;
+      return JSON.parse(result[0].geojson) as GeoJsonFeatureCollection;
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Error al obtener el GeoJSON nativo de barrios',
+        error instanceof Error ? error.message : 'Error desconocido',
+      );
+    }
+  }
+
+  async getViasGeoJsonNativo(filters: FilterViasDto) {
+    try {
+      const { localidadCod, barrioCod } = filters;
+      const result = await this.prisma.$queryRaw<Array<{ geojson: string }>>`
+      SELECT json_build_object(
+        'type', 'FeatureCollection',
+        'features', COALESCE(json_agg(
+          json_build_object(
+            'type', 'Feature',
+            'id', v.id,
+            'properties', json_build_object(
+              'id', v.id,
+              'texto', v.texto,
+              'abrTexto', v.abr_texto,
+              'shapeLen', v.shape_len
+            ),
+            'geometry', ST_AsGeoJSON(v.geom)::json
+          )
+        ), '[]'::json)
+      )::text AS geojson
+      FROM vias v
+      WHERE
+        (${barrioCod}::text IS NULL OR EXISTS (
+          SELECT 1 FROM barrios b
+          WHERE b.identificador = ${barrioCod}
+          AND ST_Intersects(v.geom, b.geom)
+        ))
+        AND
+        (${localidadCod}::text IS NULL OR EXISTS (
+          SELECT 1 FROM localidades l
+          WHERE l.identificador = ${localidadCod}
+          AND ST_Intersects(v.geom, l.geom)
+        ));
+    `;
+      return JSON.parse(result[0].geojson) as GeoJsonFeatureCollection;
+    } catch (error: unknown) {
+      throw new InternalServerErrorException(
+        'Error al obtener el GeoJSON nativo de vías',
+        error instanceof Error ? error.message : 'Error desconocido',
+      );
+    }
+  }
 }

@@ -17,6 +17,10 @@ import { MicrorrutasService } from './microrrutas.service';
 import { CreateMicrorrutaDto } from './dto/create-microrruta.dto';
 import { UpdateMicrorrutaDto } from './dto/update-microrruta.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import {
+  responderExportGeo,
+  parseFormatoExport,
+} from '../common/utils/geo-export.util';
 
 @Controller('/microrrutas')
 export class MicrorrutasController {
@@ -80,5 +84,26 @@ export class MicrorrutasController {
       'attachment; filename="microrrutas.xlsx"',
     );
     res.send(buffer);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('exportar-capa')
+  async exportarCapa(
+    @Query('barrioCod') barrioCod: string | undefined,
+    @Query('localidadCod') localidadCod: string | undefined,
+    @Query('formato') formato: string | undefined,
+    @Res() res: Response,
+  ) {
+    const geojson = await this.microrrutasService.exportarCapaGeoJson({
+      barrioCod,
+      localidadCod,
+    });
+    await responderExportGeo(
+      res,
+      geojson,
+      parseFormatoExport(formato),
+      'microrrutas',
+      'polyline',
+    );
   }
 }
