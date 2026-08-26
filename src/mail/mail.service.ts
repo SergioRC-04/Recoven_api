@@ -1,33 +1,96 @@
 import { Injectable } from '@nestjs/common';
-import { MailerService } from '@nestjs-modules/mailer';
-import type { SentMessageInfo } from 'nodemailer';
+import { Resend } from 'resend';
 import * as QRCode from 'qrcode';
 
+interface Adjunto {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+  // Para imágenes embebidas: referenciar como cid:ESTE_VALOR en el HTML.
+  contentId?: string;
+}
+
+interface EnviarCorreoOptions {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+  attachments?: Adjunto[];
+}
+
+// Convierte un valor unknown a texto de forma segura y explícita — evita
+// depender de la coerción implícita de `${valor}` dentro de una plantilla,
+// que es justo lo que dispara el warning de restrict-template-expressions.
+function aTexto(valor: unknown): string {
+  if (valor instanceof Error) return valor.message;
+  if (typeof valor === 'object' && valor !== null) {
+    try {
+      return JSON.stringify(valor);
+    } catch {
+      const nombreConstructor = valor.constructor?.name ?? 'objeto';
+      return `[${nombreConstructor} no serializable]`;
+    }
+  }
+  return String(valor);
+}
 @Injectable()
 export class MailService {
-  constructor(private readonly mailerService: MailerService) {}
+  private readonly resend: Resend;
 
-  async sendMail(options: {
-    to: string;
+  constructor() {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new Error('Falta RESEND_API_KEY en las variables de entorno');
+    }
+    this.resend = new Resend(apiKey);
+  }
+
+  // ⚠️ El SDK de Resend NO lanza excepciones — devuelve { data, error }
+  // incluso cuando el envío falla (confirmado en su documentación oficial).
+  // Este helper es el ÚNICO lugar que llama a resend.emails.send()
+  // directamente: revisa `error` y lo convierte en una excepción real, para
+  // que el resto del código pueda confiar en try/catch normalmente. Si en
+  // el futuro se agrega otro método que envíe correo, debe pasar por aquí
+  // — nunca llamar a resend.emails.send() directo en otro lado.
+  private async enviar(params: {
+    to: string | string[];
     subject: string;
     html: string;
     text?: string;
     attachments?: {
       filename: string;
-      content: Buffer;
+      content: string;
       contentType?: string;
+      contentId?: string;
     }[];
-  }): Promise<SentMessageInfo> {
-    return await this.mailerService.sendMail({
-      from: process.env.MAIL_FROM,
-      ...options,
+  }): Promise<void> {
+    const { error } = await this.resend.emails.send({
+      from: process.env.MAIL_FROM || 'no-reply@recovenesp.com',
+      ...params,
+    });
+    if (error) {
+      throw new Error(`Resend: ${error.message}`);
+    }
+  }
+
+  async sendMail(options: EnviarCorreoOptions): Promise<void> {
+    await this.enviar({
+      to: [options.to],
+      subject: options.subject,
+      html: options.html,
+      text: options.text,
+      attachments: options.attachments?.map((a) => ({
+        filename: a.filename,
+        content: a.content.toString('base64'),
+        contentType: a.contentType,
+        contentId: a.contentId,
+      })),
     });
   }
 
-  async sendSecurityCode(email: string, code: string) {
-    await this.mailerService.sendMail({
-      to: email, // Correo del administrador que intenta loguearse
-      from: process.env.MAIL_FROM,
+  async sendSecurityCode(email: string, code: string): Promise<void> {
+    await this.enviar({
+      to: [email],
       subject: '🔒 Código de verificación de seguridad - RECOVEN',
       html: `
         <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; max-width: 500px;">
@@ -48,8 +111,8 @@ export class MailService {
     nombreEmpresa: string,
     tipo: 'PODA' | 'RESIDUOS',
     file: Express.Multer.File,
-    certificateUrl: string, // <-- Recibimos la URL de Supabase
-  ) {
+    certificateUrl: string,
+  ): Promise<void> {
     const esPoda = tipo === 'PODA';
     const subject = esPoda
       ? 'Certificado de Disposición Final de Residuos de Poda - RECOVEN ECA'
@@ -63,18 +126,13 @@ export class MailService {
       ? 'correspondiente a las actividades de poda ejecutadas en las zonas de recolección autorizadas.'
       : 'correspondiente a los proyectos corporativos especiales y de materiales diversos procesados en nuestras plantas de clasificación.';
 
-    // 1. Generar la imagen del QR en un Buffer usando la URL de Supabase
     const qrBuffer = await QRCode.toBuffer(certificateUrl, {
       type: 'png',
       width: 250,
       margin: 2,
-      color: {
-        dark: '#059669', // Verde corporativo
-        light: '#FFFFFF',
-      },
+      color: { dark: '#059669', light: '#FFFFFF' },
     });
 
-    // 2. Texto plano de respaldo
     const textoPlano = `
 Estimado equipo de ${nombreEmpresa},
 
@@ -90,10 +148,9 @@ RECOVEN ECA SAS ESP
 Barranquilla, Atlántico, Colombia
   `;
 
-    await this.mailerService.sendMail({
-      to: emailDestinatario,
-      from: process.env.MAIL_FROM,
-      subject: subject,
+    await this.enviar({
+      to: [emailDestinatario],
+      subject,
       text: textoPlano,
       html: `
       <!DOCTYPE html>
@@ -119,7 +176,6 @@ Barranquilla, Atlántico, Colombia
             
             <p>De manera formal y en cumplimiento de los estándares operativos, adjunto a este mensaje encontrará el <strong>${tituloCertificado}</strong> ${parrafoDetalle}</p>
             
-            <!-- SECCIÓN DEL CÓDIGO QR -->
             <div style="background-color: #f9fafb; border: 1px dashed #10b981; border-radius: 8px; padding: 20px; margin: 25px 0; text-align: center;">
               <p style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold; color: #065f46;">
                 🔍 Verificación Digital con Código QR
@@ -160,15 +216,68 @@ Barranquilla, Atlántico, Colombia
       attachments: [
         {
           filename: file.originalname,
-          content: file.buffer,
+          content: file.buffer.toString('base64'),
           contentType: file.mimetype,
         },
         {
           filename: 'qr-certificado.png',
-          content: qrBuffer,
-          cid: 'qrcode-certificate', // Referenciado como cid:qrcode-certificate en la etiqueta <img>
+          content: qrBuffer.toString('base64'),
+          contentId: 'qrcode-certificate',
         },
       ],
     });
+  }
+
+  /**
+   * Notifica al administrador (MAIL_ADMIN_DEV) cuando algo falla en un
+   * flujo crítico (p. ej. el envío de un certificado). Nunca lanza — si
+   * hasta esta notificación falla, se deja constancia en el log del
+   * servidor como último recurso, porque no hay a quién más avisar.
+   */
+
+  async notifyAdminError(
+    contexto: string,
+    error: unknown,
+    meta?: Record<string, unknown>,
+  ): Promise<void> {
+    const destinatario = process.env.MAIL_ADMIN_DEV;
+    if (!destinatario) {
+      console.error(
+        'MAIL_ADMIN_DEV no está configurado — no se pudo notificar el error:',
+        contexto,
+        error,
+      );
+      return;
+    }
+
+    const mensaje = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
+    const metaTexto = meta
+      ? Object.entries(meta)
+          .map(([k, v]) => `${k}: ${aTexto(v)}`)
+          .join('\n')
+      : '';
+
+    try {
+      await this.enviar({
+        to: [destinatario],
+        subject: `⚠️ Error en RECOVEN: ${contexto}`,
+        text: `Error: ${contexto}\n${mensaje}\n${metaTexto}`,
+        html: `
+          <div style="font-family: sans-serif; padding: 20px;">
+            <h2 style="color: #b91c1c;">Error: ${contexto}</h2>
+            <p><strong>Mensaje:</strong> ${mensaje}</p>
+            ${metaTexto ? `<pre style="background:#f3f4f6; padding:12px; border-radius:6px; white-space:pre-wrap;">${metaTexto}</pre>` : ''}
+            ${stack ? `<pre style="background:#f3f4f6; padding:12px; border-radius:6px; font-size:11px; overflow-x:auto; white-space:pre-wrap;">${stack}</pre>` : ''}
+            <p style="color:#6b7280; font-size:12px;">Generado automáticamente el ${new Date().toLocaleString('es-CO')}.</p>
+          </div>
+        `,
+      });
+    } catch (notifyError) {
+      console.error(
+        'No se pudo enviar el correo de notificación de error:',
+        notifyError,
+      );
+    }
   }
 }

@@ -55,13 +55,21 @@ model EmpresasClientes {
   @@map("empresas_clientes")
 }
 
+enum EstadoCertificado {
+  PENDIENTE
+  ENVIADO
+  FALLIDO
+}
+
 model Certificados {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  empresaId     String   @map("empresa_id") @db.Uuid
-  tipo          String   @db.VarChar(20) // 'PODA' o 'RESIDUOS'
-  nombreArchivo String   @map("nombre_archivo") @db.VarChar(255)
-  urlArchivo    String?  @map("url_archivo") @db.VarChar(255)
-  fechaEnvio    DateTime @default(now()) @map("fecha_envio") @db.Timestamp(6)
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  empresaId     String            @map("empresa_id") @db.Uuid
+  tipo          String            @db.VarChar(20)
+  nombreArchivo String            @map("nombre_archivo") @db.VarChar(255)
+  urlArchivo    String?           @map("url_archivo") @db.VarChar(255)
+  estado        EstadoCertificado @default(PENDIENTE)
+  errorDetalle  String?           @map("error_detalle")
+  fechaEnvio    DateTime          @default(now()) @map("fecha_envio") @db.Timestamp(6)
 
   empresa EmpresasClientes @relation(fields: [empresaId], references: [id], onDelete: Restrict)
 
