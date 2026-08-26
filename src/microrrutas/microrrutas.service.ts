@@ -289,4 +289,41 @@ export class MicrorrutasService {
 
     return JSON.parse(rows[0].geojson) as GeoJsonFeatureCollection;
   }
+  /**
+   * Calcula geométricamente en qué barrio (y su localidad) cae una
+   * microrruta, en vez de depender del barrio asignado a un reciclador. Si
+   * la ruta cruza varios barrios, se queda con el de mayor longitud de
+   * intersección — el barrio donde efectivamente transcurre la mayor parte
+   * del recorrido.
+   */
+  async resolverUbicacion(id: number) {
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        barrio_cod: string;
+        barrio_nombre: string;
+        localidad_cod: string | null;
+        localidad_nombre: string | null;
+      }>
+    >`
+    SELECT
+      b.identificador AS barrio_cod,
+      b.nombre_barrio AS barrio_nombre,
+      l.identificador AS localidad_cod,
+      l.nombre AS localidad_nombre
+    FROM microrrutas m
+    JOIN barrios b ON ST_Intersects(m.geom, b.geom)
+    LEFT JOIN localidades l ON l.identificador = b.localidad_cod
+    WHERE m.id = ${id}
+    ORDER BY ST_Length(ST_Intersection(m.geom, b.geom)) DESC
+    LIMIT 1;
+  `;
+
+    const fila = rows[0];
+    return {
+      barrioCod: fila?.barrio_cod ?? null,
+      barrioNombre: fila?.barrio_nombre ?? null,
+      localidadCod: fila?.localidad_cod ?? null,
+      localidadNombre: fila?.localidad_nombre ?? null,
+    };
+  }
 }
