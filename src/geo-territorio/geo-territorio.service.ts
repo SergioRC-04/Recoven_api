@@ -68,6 +68,7 @@ export class GeoTerritorioService {
               ),
               'geometry', ST_AsGeoJSON(ST_Transform(geom, 4326))::json
             )
+            ORDER BY nombre_barrio ASC  
           ), '[]'::json)
         )::text AS geojson
         FROM barrios
