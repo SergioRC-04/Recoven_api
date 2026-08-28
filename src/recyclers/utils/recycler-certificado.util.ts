@@ -84,7 +84,7 @@ function dibujarCopia(
   doc.font('Helvetica').text(` ${clasificacionTexto}`, { continued: true });
   doc.font('Helvetica-Bold').text('   Estado de censo:', { continued: true });
   doc.font('Helvetica').text(` ${estadoTexto}`);
-  cursorY += 40; // más espacio antes de firmas
+  cursorY += 30; // más espacio antes de firmas
 
   // --- Firmas (empresa y trabajador) lado a lado ---
   const separacionColumnas = 50; // más separación entre firmas
@@ -177,6 +177,7 @@ export function generarCertificadoPdf(
 ): InstanceType<typeof PDFDocument> {
   const doc = new PDFDocument({ size: 'LETTER', margin: 0 });
   const pageWidth = doc.page.width;
+  const pageHeight = doc.page.height;
   const margenExterno = 24;
   const gapEntreCopias = 24;
 
@@ -188,6 +189,15 @@ export function generarCertificadoPdf(
     datos,
     margenExterno,
     yPrimera,
+    anchoCopia,
+  );
+
+  const ySegunda = yPrimera + alturaCopia1 + gapEntreCopias;
+  const alturaCopia2 = dibujarCopia(
+    doc,
+    datos,
+    margenExterno,
+    ySegunda,
     anchoCopia,
   );
 
