@@ -1,0 +1,32 @@
+CONTRATO DE LICENCIA DE SOFTWARE PROPIETARIO - TODOS LOS DERECHOS RESERVADOS
+
+Copyright (c) 2026 SERGIO LUIS RODRIGUEZ CABANA / RECOVEN ECA SAS ESP.
+
+Por la presente se notifica que este código fuente, arquitectura de API,
+modelos de datos, lógica de negocio (NestJS/TypeScript/Prisma) y elementos
+de diseño asociados son propiedad exclusiva de los titulares del copyright
+arriba mencionados.
+
+Este proyecto se expone públicamente de forma única y exclusiva con fines
+de DEMOSTRACIÓN, EVALUACIÓN TÉCNICA y EXHIBICIÓN DE PORTAFOLIO PROFESIONAL.
+
+QUEDA ESTRICTAMENTE PROHIBIDO:
+
+1. La copia, reproducción, duplicación o distribución total o parcial de
+   este código fuente.
+2. La utilización del software o de cualquiera de sus partes (como el
+   motor de cálculo geoespacial de rutas de recolección o el sistema de
+   generación de certificados y reportes) para la creación de proyectos
+   derivados, servicios comerciales o aplicaciones de terceros.
+3. El sublicenciamiento, venta o explotación comercial de este desarrollo
+   sin una autorización previa, expresa y por escrito de los titulares
+   del copyright.
+
+Cualquier uso no autorizado de este código fuente constituirá una
+violación directa de los derechos de propiedad intelectual y propiedad
+industrial, quedando sujeto a las acciones legales civiles y penales
+correspondientes bajo las normativas de derechos de autor de la República
+de Colombia y los tratados internacionales vigentes (Convenio de Berna).
+
+Este software se proporciona "tal cual", para fines de visualización en
+portafolio, sin garantías de ningún tipo.

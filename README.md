@@ -1,123 +1,116 @@
 # RECOVEN Backend Service
 
-> Enterprise Core API para la Gestión y Certificación de Residuos Ambientales.
+> Enterprise Core API para la Gestión Ambiental, Territorial y de Certificación de RECOVEN.
 
 ---
 
-[![Estatus](https://img.shields.io/badge/Estatus-Producci%C3%B3n-green?style=flat-square)]()
-[![Licencia](https://img.shields.io/badge/Licencia-Propietaria-red?style=flat-square)]()
-[![Framework](https://img.shields.io/badge/NestJS-v11.x-E0234E?style=flat-square&logo=nestjs)]()
-[![ORM](https://img.shields.io/badge/Prisma-ORM-2D3748?style=flat-square&logo=prisma)]()
-[![Database](https://img.shields.io/badge/PostgreSQL%20%2B%20PostGIS-336791?style=flat-square&logo=postgresql)]()
+[![Estatus](https://img.shields.io/badge/Estatus-Producci%C3%B3n-green?style=flat-square)](#)
+[![Acceso](https://img.shields.io/badge/Acceso-Privado-red?style=flat-square)](#)
+[![Framework](https://img.shields.io/badge/NestJS-v11.x-E0234E?style=flat-square&logo=nestjs)](#)
+[![ORM](https://img.shields.io/badge/Prisma-ORM-2D3748?style=flat-square&logo=prisma)](#)
+[![Database](https://img.shields.io/badge/PostgreSQL-v16-336791?style=flat-square&logo=postgresql)](#)
 
-📌 Repositorio del backend de **RECOVEN**, publicado con fines de portafolio profesional. El código es de uso **propietario**: se puede consultar libremente, pero su reutilización, redistribución o despliegue no están permitidos sin autorización.
+🔒 **AVISO DE CONFIDENCIALIDAD:** Este repositorio contiene el código fuente del núcleo lógico empresarial de RECOVEN. Es un proyecto estrictamente **PRIVADO**. Queda prohibida su distribución, clonación o exposición pública de su arquitectura interna o credenciales sin autorización expresa de la propiedad. Ver [LICENSE](./LICENSE).
 
 ---
 
 ## 1. Descripción General
 
-Este servicio constituye la API robusta y centralizada para la plataforma de servicios ambientales de **RECOVEN**. Construido bajo una arquitectura empresarial modular utilizando **NestJS**, el sistema procesa la lógica de negocio crítica de la compañía: la gestión de clientes empresariales, la certificación y despacho de operaciones ambientales, la atención del canal ciudadano de PQRSDF, la captura de leads comerciales, la cartografía geoespacial del territorio de operación y la generación de reportes e indicadores de gestión, todo con persistencia relacional validada por tipos y sesiones administrativas protegidas.
+Este servicio constituye la API robusta y centralizada para la plataforma de servicios ambientales de **RECOVEN**. Construido bajo una arquitectura empresarial modular utilizando **NestJS**, el sistema procesa la lógica de negocio crítica, la persistencia relacional con validación de tipos, la gestión de sesiones seguras, el despacho automatizado de certificaciones y notificaciones por correo, y — mediante **PostGIS** — el modelado y análisis geoespacial de la operación territorial: localidades, barrios, malla vial y microrrutas de recolección.
 
 ## 2. Características y Arquitectura Modular
 
 El backend está desacoplado en módulos altamente cohesivos siguiendo el principio **DRY** y las mejores prácticas de _Clean Code_:
 
-- **Módulo de Seguridad (Auth):** Control de accesos mediante tokens asimétricos firmados criptográficamente (JWT) con estrategias de validación e inyección de encabezados. Incluye verificación en dos pasos (2FA) por código enviado al correo del administrador.
-- **Módulo de Clientes (Customers):** CRUD administrativo de las empresas cliente (`EmpresasClientes`) sobre las cuales se emiten certificados.
-- **Módulo de Certificados y Gestión Ambiental (Certificates):** Registro de operaciones de recolección, poda o disposición de residuos; sube el soporte documental a almacenamiento en la nube y despacha automáticamente el certificado al cliente por correo.
-- **Módulo de PQRSDF:** Canal público de Peticiones, Quejas, Reclamos, Sugerencias, Denuncias y Felicitaciones para ciudadanos, con generación de radicado único, consulta de estado autenticada por identificación, y panel administrativo de gestión/respuesta.
-- **Módulo de Leads:** Captura las solicitudes de cotización o contacto provenientes de la Landing Page pública, las persiste y notifica al equipo comercial por correo.
-- **Módulo de Analítica y Reportes (Analytics/Metrics):** Indicadores mensuales de aprovechamiento y rechazo por sede, con generación dinámica de gráficas (`@napi-rs/canvas`) embebidas en reportes PDF (`pdfkit`).
-- **Módulo Geoespacial (Geo-Territorio):** Expone las capas cartográficas de localidades, barrios y la red vial (formato GeoJSON) sobre una base de datos con extensión **PostGIS**, con soporte de filtrado espacial por intersección geométrica.
-- **Módulo de Notificaciones (Mailer):** Motor de despacho asíncrono integrado con servidores SMTP corporativos para el envío seguro de documentación técnica adjunta.
-- **Capa de Datos Transaccional:** Abstracción y control de base de datos relacional robusta operada a través de consultas tipo-seguras con **Prisma ORM**.
+- **Módulo de Seguridad (Auth):** Control de accesos mediante tokens asimétricos firmados criptográficamente (JWT, expiración de 60 minutos) con verificación en dos factores (2FA) por correo electrónico.
+- **Módulo de Notificaciones (Mail):** Motor de despacho transaccional sobre **Resend** (migrado desde SMTP genérico por problemas de entregabilidad a dominios institucionales) para códigos de verificación, certificados a empresas con verificación por QR, y alertas automáticas al equipo de desarrollo ante fallos en flujos críticos.
+- **Módulo de Certificados (Certificates):** Registra el intento de envío _antes_ de subir el archivo o despachar el correo (`PENDIENTE` → `ENVIADO`/`FALLIDO`), para que ninguna falla a mitad de camino quede sin rastro. Sube el documento a Supabase Storage y despacha el correo con código QR de verificación.
+- **Módulo de Empresas (Customers):** CRUD de empresas clientes destinatarias de certificados.
+- **Módulo de Territorio (Geo-Territorio):** Exposición de localidades, barrios y malla vial como GeoJSON, con reproyección a EPSG:4326 para consumo en mapas web y exportación en su proyección nativa (EPSG:9377, MAGNA-SIRGAS Origen Nacional) para GeoJSON/Shapefile compatibles con QGIS/ArcGIS.
+- **Módulo de Microrrutas:** CRUD de rutas de recolección con geometría PostGIS, cálculo geométrico (no asignado a mano) del barrio/localidad por los que efectivamente transcurre cada ruta mediante `ST_Intersects`/`ST_Intersection`, y generación de reportes en el formato oficial de la SSPD (Excel) además de exportaciones GIS.
+- **Módulo de Recicladores (Recyclers):** Censo y clasificación de recicladores de oficio, generación de certificados de vinculación en PDF (`pdfkit`) y reportes Excel con formato condicional por estado (`exceljs`).
+- **Capa de Datos Transaccional:** Abstracción y control de base de datos relacional robusta operada a través de consultas tipo-seguras con **Prisma ORM**; las consultas espaciales que requieren SQL crudo (por las funciones de PostGIS) se parametrizan con `Prisma.sql`/`Prisma.join`, nunca por concatenación de strings.
 
 ## 3. Stack Tecnológico Principal
 
-| Componente              | Tecnología                            | Propósito en el Ecosistema                                           |
-| ----------------------- | ------------------------------------- | -------------------------------------------------------------------- |
-| **Core Framework**      | NestJS v11.x                          | Inyección de dependencias, modularidad y decoradores nativos.        |
-| **Lenguaje**            | TypeScript v5.x                       | Tipado estricto y prevención de errores en tiempo de diseño.         |
-| **Mapeo de Datos**      | Prisma ORM v7.x                       | Modelado relacional tipo-seguro y automatización de esquemas.        |
-| **Motor de BD**         | PostgreSQL / Driver `pg`              | Almacenamiento persistente transaccional con ACID garantizado.       |
-| **Datos Geoespaciales** | PostGIS + GeoJSON                     | Modelado y consulta espacial de localidades, barrios y vías.         |
-| **Almacenamiento**      | Supabase Storage                      | Persistencia de archivos adjuntos (certificados, soportes PQRSDF).   |
-| **Autenticación**       | Passport-JWT + bcrypt                 | Emisión de tokens, verificación 2FA y hash seguro de contraseñas.    |
-| **Reportes**            | pdfkit, exceljs, @napi-rs/canvas      | Generación de PDFs, hojas de cálculo y gráficas para reportes.       |
-| **Notificaciones**      | Nodemailer / `@nestjs-modules/mailer` | Envío transaccional de correo (2FA, certificados, leads, PQRSDF).    |
-| **Validación**          | Class-Validator & Transformer         | Sanitización global obligatoria de DTOs en el middleware de entrada. |
-| **Seguridad HTTP**      | Helmet + `@nestjs/throttler`          | Cabeceras de seguridad estándar y rate limiting por IP.              |
+| Componente               | Tecnología                    | Propósito en el Ecosistema                                                          |
+| ------------------------ | ----------------------------- | ----------------------------------------------------------------------------------- |
+| **Core Framework**       | NestJS v11.x                  | Inyección de dependencias, modularidad y decoradores nativos.                       |
+| **Lenguaje**             | TypeScript v5.x               | Tipado estricto y prevención de errores en tiempo de diseño.                        |
+| **Mapeo de Datos**       | Prisma ORM                    | Modelado relacional tipo-seguro y automatización de esquemas.                       |
+| **Motor de BD**          | PostgreSQL + PostGIS (Neon)   | Almacenamiento transaccional con ACID garantizado y cálculos espaciales nativos.    |
+| **Almacenamiento**       | Supabase Storage              | Archivos adjuntos: certificados y documentos de PQRSDF.                             |
+| **Correo Transaccional** | Resend                        | Envío de códigos 2FA, certificados con QR y alertas de error.                       |
+| **Reportes .xlsx**       | ExcelJS                       | Reporte SUI de microrrutas y exportaciones de recicladores con formato condicional. |
+| **Reportes .pdf**        | PDFKit                        | Certificados de vinculación de recicladores.                                        |
+| **Validación**           | Class-Validator & Transformer | Sanitización global obligatoria de DTOs en el middleware de entrada.                |
 
 ## 4. Estructura de Endpoints de la API
 
-Toda la comunicación con la API se realiza mediante el intercambio de objetos JSON (o `multipart/form-data` cuando hay archivos adjuntos). Las rutas se sirven sin prefijo global (es decir, `/auth/login`, no `/api/auth/login`) y están protegidas según el rol o el estado de autenticación del cliente mediante `JwtAuthGuard`.
+Toda la comunicación con la API se realiza mediante el intercambio de objetos JSON (salvo las descargas de archivos, que devuelven binarios con las cabeceras `Content-Type`/`Content-Disposition` correspondientes), y las rutas están protegidas según el rol o el estado de autenticación del cliente.
 
 ### 4.1. Módulo de Autenticación (`/auth`)
 
-Encargado del ciclo de vida de la sesión del administrador, el aprovisionamiento de tokens de acceso y la seguridad perimetral.
+Encargado del ciclo de vida de la sesión del usuario, el aprovisionamiento de tokens de acceso y la seguridad perimetral. Todos los endpoints están limitados por `@Throttle` contra fuerza bruta.
 
-- `POST /auth/login` — Autentica al administrador con `username` y `password` (hash bcrypt). Si son válidas, dispara un código 2FA al correo registrado y responde `{ requires2FA: true }`.
-- `POST /auth/verify-2fa` — Recibe `{ username, code }`, valida el código temporal (expira a los 5 min) y retorna el `access_token` (JWT Bearer).
-- `POST /auth/resend-2fa` — Recibe `{ username }` y reenvía un nuevo código 2FA.
+- `POST /auth/login` — Valida credenciales y, si son correctas, dispara el código 2FA por correo (no entrega el token todavía).
+- `POST /auth/verify-2fa` — Valida el código recibido y entrega el `access_token` (JWT, expira en 60 minutos).
+- `POST /auth/resend-2fa` — Reenvía un nuevo código 2FA.
 
-### 4.2. Módulo de Clientes (`/customers`) 🔒 _Requiere JWT_
+### 4.2. Módulo de Certificados (`/certificates`)
 
-CRUD de las empresas cliente sobre las que se emiten certificados.
+Gestiona el despacho de certificados a empresas clientes (poda o residuos aprovechables) y su historial.
 
-- `GET /customers` — Lista todas las empresas registradas (para el dropdown del panel admin).
-- `POST /customers` — Crea una nueva empresa (`nombre`, `correo`).
-- `PUT /customers/:id` — Actualiza `nombre` y/o `correo` de una empresa (UUID).
-- `DELETE /customers/:id` — Elimina una empresa por su UUID.
+- `POST /certificates/upload` — `multipart/form-data` con el archivo y los metadatos (empresa, tipo). Sube el archivo a Supabase, registra el intento en estado `PENDIENTE` antes de cualquier paso riesgoso, envía el correo con QR de verificación, y actualiza el registro a `ENVIADO` o `FALLIDO` según el resultado. Si falla, notifica automáticamente por correo al equipo de desarrollo con el detalle del error.
+- `GET /certificates/history` — Historial completo de certificados, con su estado y (si aplica) el detalle del error.
 
-### 4.3. Módulo de Certificados (`/certificates`) 🔒 _Requiere JWT_
+### 4.3. Módulo de Empresas (`/customers`)
 
-Gestiona el registro y despacho de certificaciones ambientales.
+- `GET /customers` — Listado de empresas clientes, ordenado alfabéticamente.
+- `POST /customers` — Crea una empresa cliente.
+- `PUT /customers/:id` — Actualiza nombre/correo.
+- `DELETE /customers/:id` — Elimina una empresa cliente.
 
-- `POST /certificates/upload` — `multipart/form-data` con el archivo adjunto y `{ empresaId (UUID), tipo: 'PODA' | 'RESIDUOS' }`. Sube el archivo a Supabase Storage, registra el certificado en base de datos y lo envía automáticamente por correo al cliente.
-- `GET /certificates/history` — Retorna el histórico de certificados emitidos, incluyendo nombre y correo de la empresa asociada.
+### 4.4. Módulo de Territorio (`/geo-territorio`)
 
-### 4.4. Módulo de PQRSDF (`/pqrsdf`)
+Capa geoespacial pública (sin autenticación, son datos administrativos, no personales) usada tanto por el mapa público como por el panel de administración.
 
-Canal de atención ciudadana (Peticiones, Quejas, Reclamos, Sugerencias, Denuncias, Felicitaciones).
+- `GET /geo-territorio/localidades` — GeoJSON de localidades (EPSG:4326).
+- `GET /geo-territorio/barrios?localidadCod=` — GeoJSON de barrios, opcionalmente filtrado por localidad.
+- `GET /geo-territorio/vias?localidadCod=&barrioCod=` — GeoJSON de la malla vial.
+- `GET /geo-territorio/localidades/exportar?formato=geojson|shp` — Exportación en la proyección nativa (EPSG:9377) para QGIS/ArcGIS.
+- `GET /geo-territorio/barrios/exportar?formato=&localidadCod=` — Ídem para barrios.
+- `GET /geo-territorio/vias/exportar?formato=&localidadCod=&barrioCod=` — Ídem para vías.
 
-**Endpoints públicos:**
+### 4.5. Módulo de Microrrutas (`/microrrutas`)
 
-- `POST /pqrsdf` — `multipart/form-data` opcional con archivo adjunto y los datos del peticionario (`tipo`, `nombreCompleto`, `tipoIdentificacion`, `numeroIdentificacion`, `email`, `telefono?`, `direccion?`, `asunto`, `descripcion`). Genera un radicado único (`PQRS-YYYYMM-XXXX`) y confirma la recepción.
-- `POST /pqrsdf/consultar` — Recibe `{ radicado, numeroIdentificacion }` (verificación de dos factores) y retorna el estado del caso.
+- `GET /microrrutas?barrioCod=&localidadCod=` — GeoJSON de microrrutas (EPSG:4326), público.
+- `POST /microrrutas` — Crea una microrruta (requiere JWT).
+- `PUT /microrrutas/:id` — Actualiza los atributos SUI de una microrruta (requiere JWT).
+- `PUT /microrrutas/:id/geometria` — Reemplaza únicamente la geometría del trazo (requiere JWT).
+- `DELETE /microrrutas/:id` — Elimina una microrruta (requiere JWT).
+- `GET /microrrutas/:id/ubicacion` — Resuelve geométricamente (intersección espacial en PostGIS, por longitud de solape) el barrio y la localidad por los que efectivamente pasa la ruta.
+- `GET /microrrutas/exportar-excel?barrioCod=&localidadCod=` — Reporte en el formato oficial de microrrutas de la SSPD.
+- `GET /microrrutas/exportar-capa?formato=geojson|shp&barrioCod=&localidadCod=` — Exportación GIS en EPSG:9377 (requiere JWT).
 
-**Endpoints privados** 🔒 _Requiere JWT_:
+### 4.6. Módulo de Recicladores (`/recyclers`)
 
-- `GET /pqrsdf/list` — Listado completo para el panel administrativo.
-- `PATCH /pqrsdf/estado/:id` — Actualiza `{ estado, respuesta? }`, con posibilidad de adjuntar un archivo de respuesta.
+Todos los endpoints requieren JWT.
 
-### 4.5. Módulo de Leads (`/leads`)
+- `GET /recyclers?tab=&censado=&search=` — Listado filtrable por pestaña (con ruta, sin ruta, nuevos, a quitar, desvinculados), estado de censo y búsqueda por nombre/cédula.
+- `POST /recyclers` — Crea un reciclador (con barrios y microrrutas asignados).
+- `PUT /recyclers/:id` — Actualiza datos y asignaciones.
+- `PATCH /recyclers/:id/toggle-censo` — Alterna el estado de censo.
+- `DELETE /recyclers/:id` — Desvincula (soft delete, pasa al histórico).
+- `PATCH /recyclers/:id/reactivar` — Revierte la desvinculación.
+- `GET /recyclers/:id/certificado` — Certificado de vinculación en PDF (dos copias por hoja).
+- `GET /recyclers/exportar?tipo=` — Reporte Excel por estado, con formato condicional de color en censo, asignación de ruta y clasificación.
+
+### 4.7. Módulo de Leads (`/leads`)
 
 Gestiona las interacciones y solicitudes comerciales provenientes de la Landing Page pública.
 
-- `POST /leads/send-lead` — Endpoint público que recibe la solicitud de cotización/contacto, la persiste en base de datos y notifica al equipo administrativo por correo.
-- `GET /leads` 🔒 _Requiere JWT_ — Lista los leads registrados para el panel admin.
-- `GET /leads/export_excel` 🔒 _Requiere JWT_ — Genera y descarga un `.xlsx` con el histórico completo de leads.
-
-### 4.6. Módulo de Analítica y Reportes (`/metrics`)
-
-Indicadores mensuales de gestión (aprovechamiento y rechazo de residuos por sede).
-
-- `GET /metrics` — Retorna los indicadores registrados (pensado para alimentar las gráficas del dashboard público).
-- `PUT /metrics` 🔒 _Requiere JWT_ — Crea o actualiza (`upsert`) el indicador de una sede/mes/año (`sede`, `mes`, `year`, `aprovechamiento`, `rechazo`).
-- `DELETE /metrics` 🔒 _Requiere JWT_ — Elimina el indicador de una sede/mes/año puntual.
-- `GET /metrics/export_pdf` — Compila un reporte histórico en PDF con gráficas generadas dinámicamente.
-
-> ℹ️ `GET /metrics` y `GET /metrics/export_pdf` no requieren autenticación actualmente. Si no están pensados como indicadores públicos (p. ej. para un dashboard de sostenibilidad en la Landing Page), revisar si deberían protegerse con `JwtAuthGuard`.
-
-### 4.7. Módulo Geoespacial (`/geo-territorio`)
-
-Sirve las capas cartográficas de la ciudad como `FeatureCollection` GeoJSON, consultadas directamente sobre PostGIS. Pensado para alimentar un visor de mapas en el frontend.
-
-- `GET /geo-territorio/localidades` — Retorna todas las localidades.
-- `GET /geo-territorio/barrios?localidadCod=` — Retorna los barrios; el filtro por localidad es opcional.
-- `GET /geo-territorio/vias?localidadCod=&barrioCod=` — Retorna la red vial, opcionalmente filtrada por intersección espacial con una localidad o barrio.
-
-> ℹ️ Ninguno de los tres requiere autenticación ni tiene rate limiting (`@SkipThrottle()`), y los filtros son opcionales — sin ellos, `vias` devuelve el dataset completo (~14.700 features, ~8 MB) en una sola respuesta. Al ser datos públicos que casi no cambian, se recomienda servirlos con cabeceras `Cache-Control` en lugar de dejarlos completamente sin límite, para evitar que una petición repetida sin filtros se vuelva costosa en cómputo/egress.
+- `POST /leads` — Endpoint público que recibe solicitudes de cotización o contacto.
 
 ## 5. Pipeline de Compilación y Despliegue (Producción)
 
@@ -135,11 +128,16 @@ _(Ejecuta internamente: `node dist/src/main.js` mapeando dinámicamente el socke
 
 ## 6. Estándares de Código y Calidad
 
-- **Validación Global:** El servidor ejecuta una instancia global de `ValidationPipe`, devolviendo errores HTTP 400 estandarizados ante peticiones corruptas o con tipos inválidos. _(Si se requiere rechazo estricto de propiedades no listadas en los DTOs, configurar `whitelist: true` y `forbidNonWhitelisted: true` en `main.ts`.)_
-- **Políticas de CORS:** Los orígenes de consulta permitidos están estrictamente restringidos mediante `CORS_ORIGINS`, una variable de entorno inyectada por el entorno de producción, denegando el acceso de forma nativa a clientes no autorizados.
-- **Autenticación:** Contraseñas hasheadas con `bcrypt`; sesiones administrativas protegidas con JWT + verificación 2FA por correo.
-- **Rate Limiting:** `@nestjs/throttler` aplicado globalmente (60 req/min por IP) mediante `APP_GUARD`, con límites más estrictos en las rutas sensibles a fuerza bruta: `auth/login` y `auth/verify-2fa` (5/min), `auth/resend-2fa` (3/min) y `pqrsdf/consultar` (10/min).
-- **Cabeceras HTTP:** `helmet()` habilitado globalmente en `main.ts` para las cabeceras de seguridad estándar (HSTS, X-Content-Type-Options, etc.), con `trust proxy` configurado para identificar correctamente la IP real del cliente detrás del proxy de despliegue.
+- **Validación Global:** El servidor ejecuta una instancia global de `ValidationPipe` con rechazo de propiedades no listadas (`whitelist: true`), devolviendo errores HTTP 400 estandarizados ante peticiones corruptas.
+- **Políticas de CORS:** Los orígenes de consulta permitidos están estrictamente restringidos mediante arrays reactivos inyectados por el entorno de producción, denegando el acceso de forma nativa a clientes no autorizados.
+- **Consultas espaciales parametrizadas:** Toda consulta raw que involucra funciones de PostGIS (`ST_Intersects`, `ST_Length`, `ST_Transform`, etc.) construye sus fragmentos con `Prisma.sql`/`Prisma.join` en vez de interpolar valores directamente en el string SQL — cierra la puerta a inyección SQL sin perder la expresividad que requieren los filtros espaciales dinámicos.
+- **Registro antes que optimismo:** Los flujos que combinan más de un paso externo con posibilidad de fallo (subida a almacenamiento + envío de correo) registran el intento en la base de datos _antes_ de ejecutar esos pasos, no después — así una falla a mitad de camino no deja de tener rastro.
+
+---
+
+## 📄 Licencia y Propiedad Intelectual
+
+Este repositorio es de **acceso público en GitHub exclusivamente con fines de portafolio profesional y demostración técnica** — no implica autorización de uso, copia, modificación ni distribución. Ver el archivo [LICENSE](./LICENSE) para los términos completos.
 
 ---
 
