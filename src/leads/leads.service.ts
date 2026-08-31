@@ -3,6 +3,7 @@ import { MailService } from 'src/mail/mail.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import ExcelJS from 'exceljs';
+import { escapeHtml } from 'src/common/utils/escape-html.util';
 
 @Injectable()
 export class LeadsService {
@@ -52,17 +53,17 @@ export class LeadsService {
             <h2 style="color: #059669; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">
               Datos de la Solicitud
             </h2>
-            <p><strong>Nombre completo:</strong> ${nombre}</p>
+            <p><strong>Nombre completo:</strong> ${escapeHtml(nombre)}</p>
             <p><strong>Teléfono / WhatsApp:</strong> ${telefono}</p>
             <p><strong>Correo electrónico:</strong> ${email}</p>
-            <p><strong>Empresa / Conjunto:</strong> ${empresa || 'No especificado'}</p>
-            <p><strong>Dirección / Zona:</strong> ${direccion || 'No especificado'}</p>
+            <p><strong>Empresa / Conjunto:</strong> ${escapeHtml(empresa) || 'No especificado'}</p>
+            <p><strong>Dirección / Zona:</strong> ${escapeHtml(direccion) || 'No especificado'}</p>
             <p><strong>Tipo de Servicio:</strong> ${servicio}</p>
             <p><strong>Especialidad requerida:</strong> ${especialidad || 'Ninguna seleccionada'}</p>
             
             <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin-top: 15px;">
               <strong>Detalles/Mensaje adicional:</strong><br/>
-              ${mensaje || 'Sin comentarios adicionales.'}
+              ${escapeHtml(mensaje) || 'Sin comentarios adicionales.'}
             </div>
             
             <br/>

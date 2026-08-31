@@ -11,6 +11,7 @@ import { SearchPqrsdfDto } from './dto/search-pqrsdf.dto';
 import { UpdatePqrsdfStatusDto } from './dto/update-pqrsdf.dto';
 import { randomBytes } from 'crypto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { escapeHtml } from 'src/common/utils/escape-html.util';
 
 @Injectable()
 export class PqrsdfService {
@@ -98,9 +99,9 @@ export class PqrsdfService {
         <p><strong>Confirmación de Radicado</strong></p>
         <p>Barranquilla, Atlántico., ${fechaRadicacion}</p>
         <p>Estimado(a):<br>
-        <strong>${dto.nombreCompleto}</strong></p>
+        <strong>${escapeHtml(dto.nombreCompleto)}</strong></p>
         <p><strong>Radicado N°.:</strong> ${radicado}<br>
-        <strong>Asunto:</strong> ${dto.asunto}</p>
+        <strong>Asunto:</strong> ${escapeHtml(dto.asunto)}</p>
         <p>Queremos contarle que su solicitud ha sido radicada con éxito. Puede consultar el estado de su trámite en cualquier momento desde nuestro portal web ingresando su número de radicado y número de identificación.</p>
         <p>Este mensaje es automático por favor no responderlo.</p>
       `,
@@ -119,18 +120,18 @@ export class PqrsdfService {
         <hr>
         <h3>Datos del Peticionario</h3>
         <ul>
-          <li><strong>Nombre:</strong> ${dto.nombreCompleto}</li>
+          <li><strong>Nombre:</strong> ${escapeHtml(dto.nombreCompleto)}</li>
           <li><strong>Documento:</strong> ${dto.tipoIdentificacion} ${dto.numeroIdentificacion}</li>
-          <li><strong>Correo:</strong> ${dto.email}</li>
+          <li><strong>Correo:</strong> ${escapeHtml(dto.email)}</li>
           <li><strong>Teléfono:</strong> ${dto.telefono || 'No especificado'}</li>
-          <li><strong>Dirección:</strong> ${dto.direccion || 'No especificada'}</li>
+          <li><strong>Dirección:</strong> ${escapeHtml(dto.direccion || 'No especificada')}</li>
         </ul>
         <hr>
         <h3>Detalle de la Solicitud</h3>
-        <p><strong>Asunto:</strong> ${dto.asunto}</p>
+        <p><strong>Asunto:</strong> ${escapeHtml(dto.asunto)}</p>
         <p><strong>Descripción:</strong></p>
         <blockquote style="background: #f9f9f9; padding: 10px; border-left: 4px solid #0056b3;">
-          ${dto.descripcion}
+          ${escapeHtml(dto.descripcion)}
         </blockquote>
         ${
           urlArchivo
@@ -234,9 +235,9 @@ export class PqrsdfService {
         subject: `Actualización de trámite PQRSDF: ${actualizada.radicado}`,
         html: `
           <h2>Novedad en su solicitud</h2>
-          <p>Estimado(a) <strong>${actualizada.nombreCompleto}</strong>,</p>
+          <p>Estimado(a) <strong>${escapeHtml(actualizada.nombreCompleto)}</strong>,</p>
           <p>Le informamos que su solicitud con radicado <strong>${actualizada.radicado}</strong> ha cambiado al estado: <strong style="color: #10b981;">${actualizada.estado}</strong>.</p>
-          ${actualizada.respuesta ? `<p><strong>Respuesta / Observación:</strong> ${actualizada.respuesta}</p>` : ''}
+          ${actualizada.respuesta ? `<p><strong>Respuesta / Observación:</strong> ${escapeHtml(actualizada.respuesta)}</p>` : ''}
           ${
             actualizada.urlRespuesta
               ? `<p><a href="${actualizada.urlRespuesta}" target="_blank">Descargar Documento Oficial de Respuesta</a></p>`

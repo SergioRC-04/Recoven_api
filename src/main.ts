@@ -10,8 +10,7 @@ import helmet from 'helmet';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // Necesario para que el ThrottlerGuard identifique la IP real del cliente
-  // cuando la app corre detrás de un proxy/CDN (Vercel, etc.)
+  // Necesario para que el ThrottlerGuard identifique la IP real del cliente cuando la app corre detrás de un proxy/CDN (Vercel, etc.)
   app.set('trust proxy', 1);
 
   // Cabeceras de seguridad HTTP estándar
@@ -26,7 +25,13 @@ async function bootstrap() {
     credentials: true,
   });
 
-  app.useGlobalPipes(new ValidationPipe());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
