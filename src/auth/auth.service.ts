@@ -2,13 +2,15 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
-  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import { MailService } from '../mail/mail.service';
+
+const HASH_SEÑUELO =
+  '$2b$10$hbONoBunyob8mIDq48sAueAbJ30Tq69KxqR/BvC26R1tAjMi4hvDS';
 
 @Injectable()
 export class AuthService {
@@ -22,13 +24,14 @@ export class AuthService {
     const { username, password } = dto;
 
     const admin = await this.prisma.admin.findUnique({ where: { username } });
-    if (!admin) throw new UnauthorizedException('Credenciales incorrectas');
 
-    const isPasswordValid = await bcrypt.compare(password, admin.password);
-    if (!isPasswordValid)
+    const hashParaComparar = admin?.password ?? HASH_SEÑUELO;
+    const isPasswordValid = await bcrypt.compare(password, hashParaComparar);
+
+    if (!admin || !isPasswordValid) {
       throw new UnauthorizedException('Credenciales incorrectas');
+    }
 
-    // Generar y enviar código 2FA
     await this.generateAndSend2FACode(admin.id, admin.email);
 
     return {
@@ -68,16 +71,21 @@ export class AuthService {
     };
   }
 
-  async sendTwoFactorCode(username: string) {
+  async sendTwoFactorCode(
+    username: string,
+  ): Promise<{ success: true; message: string }> {
     const admin = await this.prisma.admin.findUnique({ where: { username } });
-    if (!admin) {
-      throw new NotFoundException('Usuario no encontrado');
+
+    if (admin) {
+      this.generateAndSend2FACode(admin.id, admin.email).catch((err) =>
+        console.error('Error generando/enviando código 2FA:', err),
+      );
     }
 
-    // Generar nuevo código y enviar
-    await this.generateAndSend2FACode(admin.id, admin.email);
-
-    return { success: true, message: 'Código reenviado correctamente.' };
+    return {
+      success: true,
+      message: 'Si el usuario existe, se reenvió el código.',
+    };
   }
 
   // Método privado auxiliar para generar código y enviar correo

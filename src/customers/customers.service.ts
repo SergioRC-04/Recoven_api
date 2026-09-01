@@ -62,7 +62,7 @@ export class CustomersService {
     return resultadoBorrado;
   }
 
-  async update(id: string, data: { nombre?: string; correo?: string }) {
+  async update(id: string, data: CreateCustomerDto) {
     // Validar si existe antes de actualizar
     const existe = await this.prisma.empresasClientes.findUnique({
       where: { id },

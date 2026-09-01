@@ -2,6 +2,8 @@ import { Body, Controller, Post, HttpCode, HttpStatus } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { Verify2FADto } from './dto/verify.dto';
+import { Resend2FADto } from './dto/resend.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -17,14 +19,17 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('verify-2fa')
   @HttpCode(HttpStatus.OK)
-  async verify2FA(@Body() body: { username: string; code: string }) {
-    return await this.authService.verify2FA(body.username, body.code);
+  async verify2FA(@Body() Verify2FADto: Verify2FADto) {
+    return await this.authService.verify2FA(
+      Verify2FADto.username,
+      Verify2FADto.code,
+    );
   }
 
   @Throttle({ default: { limit: 3, ttl: 60000 } })
   @Post('resend-2fa')
   @HttpCode(HttpStatus.OK)
-  async resend2fa(@Body() body: { username: string }) {
-    return await this.authService.sendTwoFactorCode(body.username);
+  async resend2fa(@Body() Resend2FADto: Resend2FADto) {
+    return await this.authService.sendTwoFactorCode(Resend2FADto.username);
   }
 }

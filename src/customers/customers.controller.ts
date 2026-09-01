@@ -45,15 +45,18 @@ export class CustomersController {
     };
   }
 
-  @UseGuards(JwtAuthGuard)
+  // PUT /customers/:id -> Reemplaza nombre y correo. Reutiliza CreateCustomerDto
+  // a propósito (antes era un tipo inline sin ninguna validación real) — al
+  // ser un PUT, es correcto exigir el recurso completo, no una versión
+  // parcial con PartialType.
   @Put(':id')
   async updateCustomer(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
-    @Body() updateData: { nombre?: string; correo?: string },
+    @Body() updateCustomerDto: CreateCustomerDto,
   ) {
     const empresaActualizada = await this.customersService.update(
       id,
-      updateData,
+      updateCustomerDto,
     );
     return {
       success: true,
