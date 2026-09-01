@@ -36,12 +36,14 @@ export class AnalyticsController {
     return await this.analyticsService.deleteMetric(deleteMetricDto);
   }
 
+  // Ya no genera nada en el momento de la llamada — solo descarga el PDF
+  // que quedó guardado en Supabase Storage la última vez que se creó,
+  // editó o eliminó una métrica. Mismas cabeceras de siempre, mismo
+  // comportamiento de descarga directa para el cliente.
   @Get('export_pdf')
   async descargarPdfReporte(@Res() res: Response) {
-    // Llamamos al servicio que ahora devuelve un Buffer
-    const pdfBuffer = await this.analyticsService.generarReportePDF();
+    const pdfBuffer = await this.analyticsService.obtenerReportePdfAlmacenado();
 
-    // Configuramos las cabeceras directamente en el controlador
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition':
@@ -49,7 +51,6 @@ export class AnalyticsController {
       'Content-Length': pdfBuffer.length,
     });
 
-    // Enviamos el buffer al navegador
     res.end(pdfBuffer);
   }
 }

@@ -8,6 +8,9 @@ import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 
 async function bootstrap() {
+  if (!process.env.TOKEN_AUTH) {
+    throw new Error('Falta TOKEN_AUTH en las variables de entorno');
+  }
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Necesario para que el ThrottlerGuard identifique la IP real del cliente cuando la app corre detrás de un proxy/CDN (Vercel, etc.)

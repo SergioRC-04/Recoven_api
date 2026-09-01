@@ -4,14 +4,17 @@ import {
   IsBoolean,
   IsEnum,
   IsArray,
+  MaxLength,
 } from 'class-validator';
 import { ClasificacionRecycler } from '@prisma/client';
 
 export class CreateRecyclerDto {
   @IsString()
+  @MaxLength(20)
   cedula: string;
 
   @IsString()
+  @MaxLength(60)
   nombreCompleto: string;
 
   @IsOptional()

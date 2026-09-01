@@ -52,7 +52,8 @@ export class AuthService {
       );
     }
 
-    if (admin.twoFactorCode !== code) {
+    const codigoValido = await bcrypt.compare(code, admin.twoFactorCode);
+    if (!codigoValido) {
       throw new UnauthorizedException('Código de verificación incorrecto');
     }
 
@@ -94,10 +95,12 @@ export class AuthService {
     const expires = new Date();
     expires.setMinutes(expires.getMinutes() + 5);
 
+    const codeHash = await bcrypt.hash(code, 10);
+
     await this.prisma.admin.update({
       where: { id: adminId },
       data: {
-        twoFactorCode: code,
+        twoFactorCode: codeHash,
         twoFactorExpires: expires,
       },
     });
