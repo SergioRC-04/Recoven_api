@@ -60,3 +60,5 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 *.db
 
 prisma/seed.ts
+
+recoven_backup.dump

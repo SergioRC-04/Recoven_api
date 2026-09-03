@@ -106,9 +106,4 @@ export class MicrorrutasController {
       'polyline',
     );
   }
-  @UseGuards(JwtAuthGuard)
-  @Get(':id/ubicacion')
-  async obtenerUbicacion(@Param('id', ParseIntPipe) id: number) {
-    return this.microrrutasService.resolverUbicacion(id);
-  }
 }

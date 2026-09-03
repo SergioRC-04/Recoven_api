@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { UpdateMicrorrutaDto } from './dto/update-microrruta.dto';
 import * as ExcelJS from 'exceljs';
 import { GeoJsonFeatureCollection } from 'src/geo-territorio/dto/geo-territorio.dto';
+import { calcularYGuardarBarriosMicrorruta } from './utils/microrrutas-barrios.util';
 
 function formatearFechaDDMMYYYY(fecha: Date | string): string {
   const d = new Date(fecha);
@@ -69,7 +70,13 @@ export class MicrorrutasService {
     };
   }
 
-  // Consulta con transformación a EPSG:4326 para el mapa
+  // Consulta con transformación a EPSG:4326 para el mapa. El array
+  // `barrios` de cada microrruta viene de MicrorrutaBarrio (ya calculado y
+  // guardado al crear/redibujar la ruta — ver microrrutas-barrios.util.ts),
+  // agregado con una LATERAL join independiente del filtro espacial de
+  // arriba (ese filtro decide QUÉ microrrutas aparecen según el
+  // barrio/localidad consultado; esta agregación solo arma el array de
+  // barrios propios de cada una, sin importar el filtro).
   async findAll(params: { barrioCod?: string; localidadCod?: string }) {
     const { joinClause, whereClause } = this.construirFiltroEspacial(params);
 
@@ -80,9 +87,25 @@ export class MicrorrutasService {
       m.frecuencia, m.dias_frecuencia, m.estacion_transferencia, m.tipo_barrido,
       m.estado,
       ST_AsGeoJSON(ST_Transform(m.geom, 4326))::json AS geojson,
-      ROUND((ST_Length(m.geom) / 1000)::numeric, 2) AS longitud_calculada_km
+      ROUND((ST_Length(m.geom) / 1000)::numeric, 2) AS longitud_calculada_km,
+      COALESCE(mb_agg.barrios, '[]'::json) AS barrios
     FROM microrrutas m
     ${joinClause}
+    LEFT JOIN LATERAL (
+      SELECT json_agg(
+        json_build_object(
+          'barrioCod', b2.identificador,
+          'barrioNombre', b2.nombre_barrio,
+          'localidadCod', b2.localidad_cod,
+          'localidadNombre', l2.nombre
+        )
+        ORDER BY b2.nombre_barrio
+      ) AS barrios
+      FROM microrruta_barrio mb2
+      JOIN barrios b2 ON b2.identificador = mb2.barrio_id
+      LEFT JOIN localidades l2 ON l2.identificador = b2.localidad_cod
+      WHERE mb2.microrruta_id = m.id
+    ) mb_agg ON true
     ${whereClause}
     ORDER BY m.id
   `;
@@ -125,6 +148,11 @@ export class MicrorrutasService {
       RETURNING id;
     `;
 
+      const nuevaId = result[0].id;
+      if (geojsonStr) {
+        await calcularYGuardarBarriosMicrorruta(this.prisma, nuevaId);
+      }
+
       return result[0];
     } catch (error) {
       console.error('Error detallado:', error);
@@ -134,6 +162,11 @@ export class MicrorrutasService {
     }
   }
 
+  // Actualiza únicamente la geometría — usada tanto por el endpoint
+  // dedicado (PUT /microrrutas/:id/geometria) como internamente por
+  // update() cuando el payload trae un geojson nuevo. El recálculo de
+  // barrios vive aquí (no en cada llamador por separado) para que sea
+  // imposible cambiar el trazo sin que los barrios se recalculen.
   async updateGeom(id: number, geojson: object) {
     const geometryObj = this.extractGeometry(geojson);
     const geojsonStr = JSON.stringify(geometryObj);
@@ -145,6 +178,8 @@ export class MicrorrutasService {
       WHERE id = ${id};
     `;
 
+    await calcularYGuardarBarriosMicrorruta(this.prisma, id);
+
     return { success: true };
   }
 
@@ -155,7 +190,9 @@ export class MicrorrutasService {
   async update(id: number, dto: UpdateMicrorrutaDto) {
     const { geojson, fechaOperacion, ...data } = dto;
 
-    // Si el formulario incluye cambios en la geometría, actualizamos la columna PostGIS (EPSG:9377)
+    // Si el formulario incluye cambios en la geometría, actualizamos la
+    // columna PostGIS (EPSG:9377) — updateGeom ya se encarga de recalcular
+    // los barrios como parte de este mismo paso.
     if (geojson) {
       await this.updateGeom(id, geojson);
     }
@@ -288,42 +325,5 @@ export class MicrorrutasService {
   `;
 
     return JSON.parse(rows[0].geojson) as GeoJsonFeatureCollection;
-  }
-  /**
-   * Calcula geométricamente en qué barrio (y su localidad) cae una
-   * microrruta, en vez de depender del barrio asignado a un reciclador. Si
-   * la ruta cruza varios barrios, se queda con el de mayor longitud de
-   * intersección — el barrio donde efectivamente transcurre la mayor parte
-   * del recorrido.
-   */
-  async resolverUbicacion(id: number) {
-    const rows = await this.prisma.$queryRaw<
-      Array<{
-        barrio_cod: string;
-        barrio_nombre: string;
-        localidad_cod: string | null;
-        localidad_nombre: string | null;
-      }>
-    >`
-    SELECT
-      b.identificador AS barrio_cod,
-      b.nombre_barrio AS barrio_nombre,
-      l.identificador AS localidad_cod,
-      l.nombre AS localidad_nombre
-    FROM microrrutas m
-    JOIN barrios b ON ST_Intersects(m.geom, b.geom)
-    LEFT JOIN localidades l ON l.identificador = b.localidad_cod
-    WHERE m.id = ${id}
-    ORDER BY ST_Length(ST_Intersection(m.geom, b.geom)) DESC
-    LIMIT 1;
-  `;
-
-    const fila = rows[0];
-    return {
-      barrioCod: fila?.barrio_cod ?? null,
-      barrioNombre: fila?.barrio_nombre ?? null,
-      localidadCod: fila?.localidad_cod ?? null,
-      localidadNombre: fila?.localidad_nombre ?? null,
-    };
   }
 }

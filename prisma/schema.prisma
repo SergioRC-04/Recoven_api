@@ -4,9 +4,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
   extensions = [postgis]
-} 
+}
 
 // Modelo para las estadísticas de los gráficos
 model Metric {
@@ -148,8 +148,9 @@ model Barrios {
   areaShape     Float?                                      @map("st_area_shape")
   geom          Unsupported("geometry(MultiPolygon, 9377)")?
 
-  localidadRel Localidades?      @relation(fields: [localidadCod], references: [identificador])
+  localidadRel Localidades?        @relation(fields: [localidadCod], references: [identificador])
   recyclers    RecyclerBarrio[] // Relación opuesta agregada
+  microrrutas  MicrorrutaBarrio[] // Relación opuesta con microrrutas
 
   @@index([geom], type: Gist, map: "barrios_geom_idx")
   @@map("barrios")
@@ -226,6 +227,7 @@ model Microrruta {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   recyclers RecyclerMicrorruta[]
+  barrios   MicrorrutaBarrio[]
 
   @@map("microrrutas")
 }
@@ -248,4 +250,20 @@ model RecyclerBarrio {
 
   @@id([recyclerId, barrioId])
   @@map("recycler_barrio")
+}
+
+// Barrio(s) por los que efectivamente transcurre una microrruta, calculado
+// geométricamente (ver microrrutas-barrios.util.ts) al crear la ruta o al
+// redibujar su trazo — no se edita a mano. Una ruta puede tener varios
+// barrios si cruza de uno a otro; el criterio de "cruzó de verdad" vs.
+// "solo tocó el borde compartido" es lo que decide ese cálculo, no esta
+// tabla en sí, que solo guarda el resultado ya decidido.
+model MicrorrutaBarrio {
+  microrrutaId Int        @map("microrruta_id")
+  barrioId     String     @map("barrio_id")
+  microrruta   Microrruta @relation(fields: [microrrutaId], references: [id], onDelete: Cascade)
+  barrio       Barrios    @relation(fields: [barrioId], references: [identificador], onDelete: Cascade)
+
+  @@id([microrrutaId, barrioId])
+  @@map("microrruta_barrio")
 }
