@@ -8,10 +8,14 @@ import { GeoJsonFeatureCollection } from 'src/geo-territorio/dto/geo-territorio.
 import { calcularYGuardarBarriosMicrorruta } from './utils/microrrutas-barrios.util';
 
 function formatearFechaDDMMYYYY(fecha: Date | string): string {
+  // fecha_operacion se guarda como medianoche UTC del día elegido —
+  // getUTC*() en vez de get*() evita que se corra un día en cualquier
+  // servidor detrás de UTC (Colombia, UTC-5), sin importar en qué
+  // máquina corra el proceso.
   const d = new Date(fecha);
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const yyyy = d.getUTCFullYear();
   return `${dd}-${mm}-${yyyy}`;
 }
 

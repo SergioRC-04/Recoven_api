@@ -1,4 +1,4 @@
-// src/common/utils/metrics-report.util.ts
+// src/analytics/utils/metrics-report.util.ts
 //
 // Composición del reporte ejecutivo PDF de métricas (gráficas + maquetación).
 // No accede a la base de datos: recibe las métricas ya consultadas, para
@@ -9,16 +9,7 @@ import PDFDocument from 'pdfkit';
 import { createCanvas, GlobalFonts } from '@napi-rs/canvas';
 import path from 'path';
 import type { Metric } from '@prisma/client';
-
-// Convierte el stream del PDF a Buffer.
-function streamToBuffer(stream: PDFKit.PDFDocument): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-    stream.on('end', () => resolve(Buffer.concat(chunks)));
-    stream.on('error', (err) => reject(err));
-  });
-}
+import { streamToBuffer } from '../../common/utils/stream-to-buffer.util';
 
 /**
  * Genera un gráfico de barras horizontal adaptativo.

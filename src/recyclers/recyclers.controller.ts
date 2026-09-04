@@ -40,6 +40,13 @@ export class RecyclersController {
     return this.recyclersService.findAll({ tab, censado: isCensado, search });
   }
 
+  // Conteos livianos para las tarjetas KPI — no trae recicladores
+  // completos ni sus barrios/microrrutas, solo cuenta filas.
+  @Get('kpis')
+  obtenerKpis() {
+    return this.recyclersService.obtenerKpis();
+  }
+
   @Post()
   create(@Body() dto: CreateRecyclerDto) {
     return this.recyclersService.create(dto);
@@ -89,6 +96,15 @@ export class RecyclersController {
     res.send(buffer);
   }
 
+  // De solo lectura — no dispara ninguna regeneración. El frontend la usa
+  // para saber la URL vigente al cargar la página, y para sondear
+  // (polling) después de crear/editar un reciclador hasta que
+  // actualizando pase a false.
+  @Get('certificados-estado')
+  async certificadosEstado() {
+    return this.recyclersService.obtenerEstadoReporteCertificados();
+  }
+
   @Get(':id/certificado')
   async descargarCertificado(
     @Param('id', ParseIntPipe) id: number,
@@ -97,9 +113,9 @@ export class RecyclersController {
     const recycler = await this.recyclersService.findOne(id);
     const doc = generarCertificadoPdf({
       nombreCompleto: recycler.nombreCompleto,
+      tipoDocumento: recycler.tipoDocumento,
       cedula: recycler.cedula,
-      clasificacion: recycler.clasificacion,
-      censado: recycler.censado,
+      barrios: recycler.barrios,
       fechaVinculacion: recycler.fechaIngreso,
     });
 

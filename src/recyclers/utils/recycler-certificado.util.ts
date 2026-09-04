@@ -1,27 +1,36 @@
 import PDFDocument from 'pdfkit';
+import type { TipoDocumento } from '@prisma/client';
 
 const COOPERATIVA_NOMBRE = 'RECOVEN ECA SAS ESP';
 const COOPERATIVA_NIT = 'NIT 901427170-6';
 
-const CLASIFICACION_LABELS: Record<string, string> = {
-  NUEVO: 'Nuevo',
-  REGULAR: 'Regular',
-  A_QUITAR: 'A quitar',
+// Cómo se nombra cada tipo dentro del texto del certificado — en
+// minúscula porque va después de "identificado(a) con".
+const TIPO_DOCUMENTO_TEXTO: Record<TipoDocumento, string> = {
+  CEDULA_CIUDADANIA: 'cédula de ciudadanía',
+  CEDULA_EXTRANJERIA: 'cédula extranjera',
+  CEDULA_VENEZOLANA: 'cédula venezolana',
+  PASAPORTE: 'pasaporte',
+  OTRO: 'documento de identidad',
 };
 
 export interface DatosCertificado {
   nombreCompleto: string;
+  tipoDocumento: TipoDocumento;
   cedula: string;
-  clasificacion: string;
-  censado: boolean;
+  barrios: string[];
   fechaVinculacion: Date | string;
 }
 
 function formatearFecha(fecha: Date | string): string {
+  // Mismo motivo que en recyclers-export.util.ts: fechaVinculacion se
+  // guarda como medianoche UTC del día elegido — getUTC*() en vez de
+  // get*() evita que se corra un día en cualquier servidor detrás de UTC
+  // (Colombia, UTC-5), sin importar en qué máquina corra el proceso.
   const d = new Date(fecha);
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const yyyy = d.getUTCFullYear();
   return `${dd}-${mm}-${yyyy}`;
 }
 
@@ -53,9 +62,11 @@ function dibujarCopia(
   cursorY += 24;
 
   // --- Cuerpo del certificado ---
+  const tipoDocumentoTexto =
+    TIPO_DOCUMENTO_TEXTO[datos.tipoDocumento] ?? 'documento de identidad';
   const cuerpoTexto =
     `Por medio del presente documento, RECOVEN ECA SAS ESP certifica que ` +
-    `${datos.nombreCompleto}, identificado(a) con cédula de ciudadanía No. ` +
+    `${datos.nombreCompleto}, identificado(a) con ${tipoDocumentoTexto} No. ` +
     `${datos.cedula}, se encuentra registrado(a) como reciclador(a) de ` +
     `oficio vinculado(a) a esta organización desde el ${formatearFecha(datos.fechaVinculacion)}.`;
 
@@ -72,19 +83,23 @@ function dibujarCopia(
   });
   cursorY += alturaCuerpo + 18;
 
-  // --- Clasificación y estado en una línea ---
-  const clasificacionTexto =
-    CLASIFICACION_LABELS[datos.clasificacion] ?? datos.clasificacion;
-  const estadoTexto = datos.censado ? 'Censado' : 'Sin censar';
+  // --- Barrios asignados ---
+  // Se mide la altura real (puede ocupar más de una línea si el
+  // reciclador tiene varios barrios) para no encimarse con las firmas de
+  // más abajo.
+  const barriosTexto =
+    datos.barrios.length > 0
+      ? datos.barrios.join(', ')
+      : 'Sin barrios asignados';
 
-  doc
-    .font('Helvetica-Bold')
-    .fontSize(10)
-    .text('Clasificación:', x + margenX, cursorY, { continued: true });
-  doc.font('Helvetica').text(` ${clasificacionTexto}`, { continued: true });
-  doc.font('Helvetica-Bold').text('   Estado de censo:', { continued: true });
-  doc.font('Helvetica').text(` ${estadoTexto}`);
-  cursorY += 30; // más espacio antes de firmas
+  doc.font('Helvetica-Bold').fontSize(10).fillColor('#000000');
+  doc.text('Barrios:', x + margenX, cursorY, { width: anchoTexto });
+  cursorY += doc.heightOfString('Barrios:', { width: anchoTexto }) + 2;
+
+  doc.font('Helvetica').fontSize(10);
+  const alturaBarrios = doc.heightOfString(barriosTexto, { width: anchoTexto });
+  doc.text(barriosTexto, x + margenX, cursorY, { width: anchoTexto });
+  cursorY += alturaBarrios + 20; // espacio antes de firmas
 
   // --- Firmas (empresa y trabajador) lado a lado ---
   const separacionColumnas = 50; // más separación entre firmas
@@ -172,15 +187,18 @@ function dibujarCopia(
   return alturaContenido;
 }
 
-export function generarCertificadoPdf(
+// Dibuja UNA página completa (2 copias + línea de corte punteada) para un
+// solo reciclador — extraído de generarCertificadoPdf para poder
+// reutilizarlo también en generarCertificadoGeneralPdf (una página por
+// cada reciclador del reporte combinado), sin duplicar esta maquetación
+// en dos lugares.
+function dibujarPaginaCompleta(
+  doc: InstanceType<typeof PDFDocument>,
   datos: DatosCertificado,
-): InstanceType<typeof PDFDocument> {
-  const doc = new PDFDocument({ size: 'LETTER', margin: 0 });
+): void {
   const pageWidth = doc.page.width;
-  const pageHeight = doc.page.height;
   const margenExterno = 24;
   const gapEntreCopias = 24;
-
   const anchoCopia = pageWidth - margenExterno * 2;
 
   const yPrimera = 40;
@@ -193,13 +211,7 @@ export function generarCertificadoPdf(
   );
 
   const ySegunda = yPrimera + alturaCopia1 + gapEntreCopias;
-  const alturaCopia2 = dibujarCopia(
-    doc,
-    datos,
-    margenExterno,
-    ySegunda,
-    anchoCopia,
-  );
+  dibujarCopia(doc, datos, margenExterno, ySegunda, anchoCopia);
 
   const yLineaCorte = yPrimera + alturaCopia1 + gapEntreCopias / 2;
   doc
@@ -212,6 +224,45 @@ export function generarCertificadoPdf(
     .stroke()
     .undash()
     .restore();
+}
+
+/**
+ * Certificado individual (una hoja, 2 copias) — el que se descarga desde
+ * la fila de un solo reciclador en la tabla.
+ */
+export function generarCertificadoPdf(
+  datos: DatosCertificado,
+): InstanceType<typeof PDFDocument> {
+  const doc = new PDFDocument({ size: 'LETTER', margin: 0 });
+  dibujarPaginaCompleta(doc, datos);
+  return doc;
+}
+
+// Cede el control al event loop entre cada reciclador — sin esto, generar
+// el PDF combinado (trabajo de CPU síncrono en pdfkit: medir y componer
+// texto para cada uno) bloquea Node.js de punta a punta, y CUALQUIER OTRA
+// petición que llegue mientras tanto (un filtro de la tabla, otro toggle
+// de censo) queda atorada detrás, aunque no tenga nada que ver con esto.
+function cederControl(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+/**
+ * Certificado combinado: una página (2 copias) por cada reciclador de la
+ * lista, todo en un solo PDF — el reporte general que se guarda en
+ * Storage (ver RecyclersService.regenerarReporteCertificadosGeneral) y
+ * que "Exportar certificados" descarga directo desde ahí.
+ */
+export async function generarCertificadoGeneralPdf(
+  listaDatos: DatosCertificado[],
+): Promise<InstanceType<typeof PDFDocument>> {
+  const doc = new PDFDocument({ size: 'LETTER', margin: 0 });
+
+  for (let i = 0; i < listaDatos.length; i++) {
+    if (i > 0) doc.addPage();
+    dibujarPaginaCompleta(doc, listaDatos[i]);
+    await cederControl();
+  }
 
   return doc;
 }

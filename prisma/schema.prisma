@@ -184,22 +184,32 @@ enum EstadoMicrorruta {
   COMPLETO
 }
 
+enum TipoDocumento {
+  CEDULA_CIUDADANIA
+  CEDULA_EXTRANJERIA
+  CEDULA_VENEZOLANA
+  PASAPORTE
+  OTRO
+}
+
 model Recycler {
   id                 Int                   @id @default(autoincrement())
-  cedula             String                @unique
+  tipoDocumento      TipoDocumento         @default(CEDULA_CIUDADANIA) @map("tipo_documento")
+  cedula             String                // ya NO lleva @unique aquí — ver @@unique abajo
   nombreCompleto     String
   censado            Boolean               @default(false)
   estadoVinculacion  EstadoVinculacion     @default(ACTIVO)
   clasificacion      ClasificacionRecycler @default(NUEVO)
+  detalleUbicacion   String?               @map("detalle_ubicacion") @db.VarChar(255)
   deletedAt          DateTime?             @map("deleted_at")
   createdAt          DateTime              @default(now()) @map("created_at")
   updatedAt          DateTime              @updatedAt @map("updated_at")
-  fechaIngreso    DateTime         @default(dbgenerated("'2026-01-01'::timestamp")) @map("fecha_ingreso")
+  fechaIngreso       DateTime              @default(dbgenerated("'2026-01-01'::timestamp")) @map("fecha_ingreso")
 
-  // Relaciones
   microrrutas RecyclerMicrorruta[]
   barrios     RecyclerBarrio[]
 
+  @@unique([tipoDocumento, cedula])
   @@map("recyclers")
 }
 
