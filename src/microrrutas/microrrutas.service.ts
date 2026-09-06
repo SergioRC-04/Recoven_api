@@ -198,6 +198,22 @@ export class MicrorrutasService {
   // update() cuando el payload trae un geojson nuevo. El recálculo de
   // barrios vive aquí (no en cada llamador por separado) para que sea
   // imposible cambiar el trazo sin que los barrios se recalculen.
+  //
+  // dist_pavimentada (campo 8 del reporte SUI) también se recalcula aquí,
+  // a partir de la longitud real del trazo NUEVO — antes se quedaba fija
+  // en el valor calculado la última vez que se guardó (al crear la ruta, o
+  // al editar los datos completos desde el formulario), así que redibujar
+  // SOLO el trazo desde el mapa dejaba ese campo con la longitud del trazo
+  // VIEJO. dist_no_pavimentada se reinicia a 0: no hay forma de saber
+  // cuánto del trazo nuevo es sin pavimentar a partir de cuánto lo era el
+  // viejo (pueden no corresponder en nada) — si aplica, hay que
+  // especificarlo de nuevo a mano desde el formulario de datos.
+  //
+  // Los tipos 3 (limpieza de playas), 4 (corte de césped) y 5 (poda de
+  // árboles) siempre van en 0 por regla del SUI — misma lista que ya usa
+  // el frontend (TIPOS_SIN_DISTANCIAS_VIALES en types/microrruta.ts) — así
+  // que se respeta aquí también, para no terminar escribiendo una
+  // distancia real donde el reporte exige 0.
   async updateGeom(id: number, geojson: object) {
     const geometryObj = this.extractGeometry(geojson);
     const geojsonStr = JSON.stringify(geometryObj);
@@ -208,6 +224,30 @@ export class MicrorrutasService {
           updated_at = NOW()
       WHERE id = ${id};
     `;
+
+    const microrruta = await this.prisma.microrruta.findUnique({
+      where: { id },
+      select: { tipo: true },
+    });
+    const TIPOS_SIN_DISTANCIAS_VIALES = [3, 4, 5];
+    const requiereDistancia =
+      !microrruta || !TIPOS_SIN_DISTANCIAS_VIALES.includes(microrruta.tipo);
+
+    if (requiereDistancia) {
+      await this.prisma.$executeRaw`
+        UPDATE microrrutas
+        SET dist_pavimentada = ROUND((ST_Length(geom) / 1000)::numeric, 2),
+            dist_no_pavimentada = 0
+        WHERE id = ${id};
+      `;
+    } else {
+      await this.prisma.$executeRaw`
+        UPDATE microrrutas
+        SET dist_pavimentada = 0,
+            dist_no_pavimentada = 0
+        WHERE id = ${id};
+      `;
+    }
 
     await calcularYGuardarBarriosMicrorruta(this.prisma, id);
 
