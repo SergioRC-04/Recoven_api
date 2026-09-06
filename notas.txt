@@ -2,6 +2,7 @@ Corregir error en metrics
 
 Despues de un tiempo ver como se comporta el espacio de almacenamiento en ambas dbs, para ver si se puede optimizar usando solo una
 
+Hacer rellenador automatico de nombres de microrrutas
 
 Hacer testeo
 Actualizar readme

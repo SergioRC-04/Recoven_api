@@ -36,10 +36,29 @@ export class MicrorrutasService {
     return geojson;
   }
 
-  // Construye los JOIN/WHERE de filtro espacial (barrio y/o localidad),
+  // Construye el WHERE de filtro espacial (barrio y/o localidad),
   // compartido entre findAll (mapa/tabla, geometría en 4326) y
   // exportarCapaGeoJson (GIS, geometría nativa en 9377) — así el filtro se
   // mantiene idéntico en los dos casos sin duplicar la lógica.
+  //
+  // Los dos filtros se apoyan en microrruta_barrio (ya calculado y
+  // guardado al crear/redibujar cada ruta — ver
+  // microrrutas-barrios.util.ts), no en un ST_Intersects propio contra el
+  // polígono del barrio o de la localidad. Antes, el filtro de localidad
+  // SÍ hacía su propio ST_Intersects(m.geom, l.geom) — pero eso asume que
+  // el polígono de cada barrio calza perfectamente dentro del polígono de
+  // su localidad, y eso no es siempre cierto (un barrio agregado a mano
+  // — como "Pinar del Río" — puede pertenecer administrativamente a una
+  // localidad, vía localidad_cod, sin que su geometría real llegue a
+  // tocar el polígono oficial de esa localidad). El síntoma real: una
+  // ruta que se veía bien sin filtro, y bien al filtrar solo por barrio,
+  // desaparecía al combinar barrio + localidad — porque el chequeo de
+  // localidad fallaba aunque el de barrio (el que sí importa) pasara.
+  // Ahora "pertenece a la localidad X" se define como "pertenece a algún
+  // barrio cuyo localidad_cod es X" — la misma fuente que ya alimenta la
+  // columna "Barrio" de la tabla, así que filtro y columna nunca vuelven
+  // a poder contradecirse entre sí.
+  //
   // Cada fragmento se arma con el tagged template Prisma.sql, que
   // parametriza los valores en vez de concatenarlos como texto — esto es
   // lo que cierra la inyección: params.barrioCod/localidadCod nunca tocan
@@ -48,25 +67,33 @@ export class MicrorrutasService {
     barrioCod?: string;
     localidadCod?: string;
   }): { joinClause: Prisma.Sql; whereClause: Prisma.Sql } {
-    const joins: Prisma.Sql[] = [];
     const whereConditions: Prisma.Sql[] = [];
 
     if (params.barrioCod) {
-      joins.push(Prisma.sql`CROSS JOIN barrios b`);
       whereConditions.push(
-        Prisma.sql`ST_Intersects(m.geom, b.geom) AND b.identificador = ${params.barrioCod}`,
+        Prisma.sql`EXISTS (
+          SELECT 1 FROM microrruta_barrio mb
+          WHERE mb.microrruta_id = m.id AND mb.barrio_id = ${params.barrioCod}
+        )`,
       );
     }
 
     if (params.localidadCod) {
-      joins.push(Prisma.sql`CROSS JOIN localidades l`);
       whereConditions.push(
-        Prisma.sql`ST_Intersects(m.geom, l.geom) AND l.identificador = ${params.localidadCod}`,
+        Prisma.sql`EXISTS (
+          SELECT 1 FROM microrruta_barrio mb
+          JOIN barrios b2 ON b2.identificador = mb.barrio_id
+          WHERE mb.microrruta_id = m.id AND b2.localidad_cod = ${params.localidadCod}
+        )`,
       );
     }
 
     return {
-      joinClause: joins.length > 0 ? Prisma.join(joins, ' ') : Prisma.sql``,
+      // Ya no hace falta ningún CROSS JOIN — las dos condiciones son
+      // subconsultas EXISTS autocontenidas. Se conserva joinClause en el
+      // valor de retorno (siempre vacío ahora) para no tener que tocar
+      // los dos SELECT que la interpolan más abajo.
+      joinClause: Prisma.sql``,
       whereClause:
         whereConditions.length > 0
           ? Prisma.sql`WHERE ${Prisma.join(whereConditions, ' AND ')}`

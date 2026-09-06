@@ -34,6 +34,112 @@ function formatearFecha(fecha: Date | string): string {
   return `${dd}-${mm}-${yyyy}`;
 }
 
+/**
+ * Dibuja un párrafo con fragmentos de texto que pueden ser normales o en negrita,
+ * ajustando el texto a un ancho máximo con saltos de línea a nivel de palabra.
+ * Devuelve la altura total utilizada.
+ */
+function drawStyledText(
+  doc: InstanceType<typeof PDFDocument>,
+  fragments: { text: string; bold: boolean }[],
+  x: number,
+  y: number,
+  maxWidth: number,
+): number {
+  const fontSize = 10;
+  const lineHeight = fontSize * 1.2; // factor típico en PDFKit
+  const normalFont = 'Helvetica';
+  const boldFont = 'Helvetica-Bold';
+
+  // Dividir cada fragmento en tokens (palabras y espacios)
+  const tokens: { text: string; bold: boolean; isSpace: boolean }[] = [];
+  for (const frag of fragments) {
+    const parts = frag.text.split(/(\s+)/);
+    for (const part of parts) {
+      if (part.length === 0) continue;
+      const isSpace = /^\s+$/.test(part);
+      tokens.push({
+        text: part,
+        bold: frag.bold && !isSpace, // solo las palabras pueden ser negritas
+        isSpace,
+      });
+    }
+  }
+
+  let currentX = x;
+  let currentY = y;
+  let lineTokens: typeof tokens = [];
+  let lineWidth = 0;
+
+  // Función para dibujar una línea de tokens
+  function drawLine(tokensLine: typeof tokens) {
+    let drawX = currentX;
+    for (const tok of tokensLine) {
+      const font = tok.isSpace ? normalFont : tok.bold ? boldFont : normalFont;
+      doc.font(font).fontSize(fontSize);
+      // Dibujar el token (para espacios se dibuja un espacio)
+      doc.text(tok.text, drawX, currentY, {
+        continued: true,
+        lineBreak: false,
+      });
+      // Avanzar la posición X según el ancho del token
+      const width = doc.widthOfString(tok.text, { continued: true });
+      drawX += width;
+    }
+    // Mover a la siguiente línea
+    currentY += lineHeight;
+    currentX = x; // reiniciar sangría
+  }
+
+  // Función para obtener el ancho de un token (usando la fuente correspondiente)
+  function tokenWidth(tok: (typeof tokens)[0]): number {
+    const font = tok.isSpace ? normalFont : tok.bold ? boldFont : normalFont;
+    doc.font(font).fontSize(fontSize);
+    return doc.widthOfString(tok.text, { continued: true });
+  }
+
+  // Procesar tokens para formar líneas
+  for (const tok of tokens) {
+    if (tok.isSpace) {
+      // Los espacios siempre se añaden a la línea actual (no provocan salto)
+      lineTokens.push(tok);
+      lineWidth += tokenWidth(tok);
+    } else {
+      const wordWidth = tokenWidth(tok);
+      if (lineTokens.length === 0) {
+        // Primera palabra de la línea
+        if (wordWidth <= maxWidth) {
+          lineTokens.push(tok);
+          lineWidth = wordWidth;
+        } else {
+          // Palabra más larga que el ancho máximo (caso raro): se fuerza a dibujar
+          lineTokens.push(tok);
+          lineWidth = wordWidth;
+        }
+      } else {
+        if (lineWidth + wordWidth <= maxWidth) {
+          lineTokens.push(tok);
+          lineWidth += wordWidth;
+        } else {
+          // No cabe: dibujar línea actual y empezar nueva con esta palabra
+          drawLine(lineTokens);
+          lineTokens = [tok];
+          lineWidth = wordWidth;
+        }
+      }
+    }
+  }
+
+  // Dibujar la última línea si tiene tokens
+  if (lineTokens.length > 0) {
+    drawLine(lineTokens);
+  }
+
+  // Altura total = cantidad de líneas * lineHeight
+  // Como drawLine incrementa currentY al final de cada línea, currentY - y es la altura.
+  return currentY - y;
+}
+
 function dibujarCopia(
   doc: InstanceType<typeof PDFDocument>,
   datos: DatosCertificado,
@@ -61,32 +167,38 @@ function dibujarCopia(
     .text('CERTIFICADO DE VINCULACIÓN', x, cursorY, { width, align: 'center' });
   cursorY += 24;
 
-  // --- Cuerpo del certificado ---
+  // --- Cuerpo del certificado con fragmentos estilizados ---
   const tipoDocumentoTexto =
     TIPO_DOCUMENTO_TEXTO[datos.tipoDocumento] ?? 'documento de identidad';
-  const cuerpoTexto =
-    `Por medio del presente documento, RECOVEN ECA SAS ESP certifica que ` +
-    `${datos.nombreCompleto}, identificado(a) con ${tipoDocumentoTexto} No. ` +
-    `${datos.cedula}, se encuentra registrado(a) como reciclador(a) de ` +
-    `oficio vinculado(a) a esta organización desde el ${formatearFecha(datos.fechaVinculacion)}.`;
 
-  doc.font('Helvetica').fontSize(10).fillColor('#000000');
+  const fragments = [
+    {
+      text: 'Por medio del presente documento, RECOVEN ECA SAS ESP certifica que ',
+      bold: false,
+    },
+    { text: datos.nombreCompleto, bold: true },
+    { text: `, identificado(a) con ${tipoDocumentoTexto} No. `, bold: false },
+    { text: datos.cedula, bold: true },
+    {
+      text: `, se encuentra registrado(a) como reciclador(a) de oficio vinculado(a) a esta organización desde el `,
+      bold: false,
+    },
+    { text: formatearFecha(datos.fechaVinculacion), bold: true },
+    { text: '.', bold: false },
+  ];
+
   const anchoTexto = width - margenX * 2;
-  const alturaCuerpo = doc.heightOfString(cuerpoTexto, {
-    width: anchoTexto,
-    align: 'justify',
-  });
-
-  doc.text(cuerpoTexto, x + margenX, cursorY, {
-    width: anchoTexto,
-    align: 'justify',
-  });
+  // Dibujar el texto estilizado y obtener la altura utilizada
+  const alturaCuerpo = drawStyledText(
+    doc,
+    fragments,
+    x + margenX,
+    cursorY,
+    anchoTexto,
+  );
   cursorY += alturaCuerpo + 18;
 
   // --- Barrios asignados ---
-  // Se mide la altura real (puede ocupar más de una línea si el
-  // reciclador tiene varios barrios) para no encimarse con las firmas de
-  // más abajo.
   const barriosTexto =
     datos.barrios.length > 0
       ? datos.barrios.join(', ')
@@ -99,15 +211,15 @@ function dibujarCopia(
   doc.font('Helvetica').fontSize(10);
   const alturaBarrios = doc.heightOfString(barriosTexto, { width: anchoTexto });
   doc.text(barriosTexto, x + margenX, cursorY, { width: anchoTexto });
-  cursorY += alturaBarrios + 20; // espacio antes de firmas
+  cursorY += alturaBarrios + 20;
 
   // --- Firmas (empresa y trabajador) lado a lado ---
-  const separacionColumnas = 50; // más separación entre firmas
+  const separacionColumnas = 50;
   const anchoFirma = (width - margenX * 2 - separacionColumnas) / 2;
   const xFirma1 = x + margenX;
   const xFirma2 = x + margenX + anchoFirma + separacionColumnas;
 
-  const firmaBlockHeight = 48; // un poco más alto
+  const firmaBlockHeight = 48;
 
   // Línea firma 1 (empresa)
   doc
@@ -159,7 +271,7 @@ function dibujarCopia(
       align: 'center',
     });
 
-  cursorY += firmaBlockHeight + 24; // más espacio después de firmas
+  cursorY += firmaBlockHeight + 24;
 
   // --- Pie de página ---
   doc
