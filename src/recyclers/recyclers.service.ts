@@ -48,16 +48,26 @@ export class RecyclersService {
     this.supabase = createClient<any, 'public', 'public'>(url, key);
   }
 
+  // Las dimensiones de filtro son independientes y se combinan entre sí
+  // (AND) — antes "tab" era una sola pestaña excluyente (con_ruta O
+  // sin_ruta O nuevos O ...), lo que no permitía, por ejemplo, ver "con
+  // ruta" + "censados" a la vez. search ahora también hace match contra
+  // el nombre del barrio y el nombre de la ruta asignados a cada
+  // reciclador, no solo nombre/cédula.
   async findAll(filters: {
-    tab?: 'con_ruta' | 'sin_ruta' | 'nuevos' | 'a_quitar' | 'desvinculados';
+    desvinculados?: boolean;
+    rutas?: 'con_ruta' | 'sin_ruta';
+    clasificacion?: ClasificacionRecycler;
     censado?: boolean;
+    barrioId?: string;
     search?: string;
   }) {
-    const { tab, censado, search } = filters;
+    const { desvinculados, rutas, clasificacion, censado, barrioId, search } =
+      filters;
 
     const andConditions: Prisma.RecyclerWhereInput[] = [];
 
-    if (tab === 'desvinculados') {
+    if (desvinculados) {
       andConditions.push({
         OR: [
           { estadoVinculacion: EstadoVinculacion.INACTIVO },
@@ -69,17 +79,21 @@ export class RecyclersService {
         deletedAt: null,
         estadoVinculacion: EstadoVinculacion.ACTIVO,
       });
+    }
 
-      if (tab === 'con_ruta') andConditions.push({ microrrutas: { some: {} } });
-      if (tab === 'sin_ruta') andConditions.push({ microrrutas: { none: {} } });
-      if (tab === 'nuevos')
-        andConditions.push({ clasificacion: ClasificacionRecycler.NUEVO });
-      if (tab === 'a_quitar')
-        andConditions.push({ clasificacion: ClasificacionRecycler.A_QUITAR });
+    if (rutas === 'con_ruta') andConditions.push({ microrrutas: { some: {} } });
+    if (rutas === 'sin_ruta') andConditions.push({ microrrutas: { none: {} } });
+
+    if (clasificacion) {
+      andConditions.push({ clasificacion });
     }
 
     if (censado !== undefined) {
       andConditions.push({ censado });
+    }
+
+    if (barrioId) {
+      andConditions.push({ barrios: { some: { barrioId } } });
     }
 
     if (search) {
@@ -87,6 +101,22 @@ export class RecyclersService {
         OR: [
           { nombreCompleto: { contains: search, mode: 'insensitive' } },
           { cedula: { contains: search } },
+          {
+            barrios: {
+              some: {
+                barrio: { nombre: { contains: search, mode: 'insensitive' } },
+              },
+            },
+          },
+          {
+            microrrutas: {
+              some: {
+                microrruta: {
+                  nombre: { contains: search, mode: 'insensitive' },
+                },
+              },
+            },
+          },
         ],
       });
     }
@@ -283,6 +313,40 @@ export class RecyclersService {
     return actualizado;
   }
 
+  /**
+   * Asigna una microrruta a un reciclador — a diferencia de update(), que
+   * REEMPLAZA la lista completa de microrrutasIds (borra todas las que
+   * tenía y crea las que vengan en el payload), esto solo AGREGA esta una,
+   * sin tocar las demás rutas que el reciclador ya tuviera asignadas. Se
+   * usa desde el flujo de "¿asignar un trabajador?" justo después de crear
+   * una microrruta nueva, donde solo se conoce esa ruta puntual, no la
+   * lista completa de rutas de cada reciclador.
+   *
+   * findFirst + create condicional (no upsert): evita depender de conocer
+   * el nombre exacto de la clave compuesta que Prisma generó para el
+   * índice único de RecyclerMicrorruta. Si la asignación ya existiera (el
+   * reciclador ya tenía esta ruta), no hace nada — no es un error, solo
+   * ya está hecho.
+   */
+  async asignarMicrorruta(recyclerId: number, microrrutaId: number) {
+    const recycler = await this.prisma.recycler.findUnique({
+      where: { id: recyclerId },
+    });
+    if (!recycler) throw new NotFoundException('Reciclador no encontrado');
+
+    const yaAsignada = await this.prisma.recyclerMicrorruta.findFirst({
+      where: { recyclerId, microrrutaId },
+    });
+
+    if (!yaAsignada) {
+      await this.prisma.recyclerMicrorruta.create({
+        data: { recyclerId, microrrutaId },
+      });
+    }
+
+    return { success: true };
+  }
+
   // Ahora también trae los barrios asignados (solo el nombre, ya
   // aplanado) — los usa el certificado individual de vinculación en vez
   // de clasificación/estado de censo.
@@ -312,45 +376,6 @@ export class RecyclersService {
       barrios: recycler.barrios
         .map((b) => b.barrio?.nombre ?? '')
         .filter(Boolean),
-    };
-  }
-
-  /**
-   * Conteos para las tarjetas KPI del panel — antes se calculaban trayendo
-   * dos veces la lista COMPLETA de recicladores (con barrios y microrrutas
-   * anidados) solo para hacer .length y .filter().length sobre el
-   * resultado. count() no trae ninguna fila real ni ningún JOIN de
-   * barrios/microrrutas, así que es muchísimo más liviano — se nota sobre
-   * todo en toggleCenso, que antes disparaba esas dos consultas pesadas
-   * de KPIs a la vez que la de la tabla, en cada clic.
-   */
-  async obtenerKpis() {
-    const [total, censados, desvinculados] = await Promise.all([
-      this.prisma.recycler.count({
-        where: { deletedAt: null, estadoVinculacion: EstadoVinculacion.ACTIVO },
-      }),
-      this.prisma.recycler.count({
-        where: {
-          deletedAt: null,
-          estadoVinculacion: EstadoVinculacion.ACTIVO,
-          censado: true,
-        },
-      }),
-      this.prisma.recycler.count({
-        where: {
-          OR: [
-            { estadoVinculacion: EstadoVinculacion.INACTIVO },
-            { deletedAt: { not: null } },
-          ],
-        },
-      }),
-    ]);
-
-    return {
-      total,
-      censados,
-      sinCensar: total - censados,
-      desvinculados,
     };
   }
 

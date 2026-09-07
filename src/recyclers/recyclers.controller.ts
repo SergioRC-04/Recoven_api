@@ -16,6 +16,7 @@ import type { Response } from 'express';
 import { RecyclersService } from './recyclers.service';
 import { CreateRecyclerDto } from './dto/create-recycler.dto';
 import { UpdateRecyclerDto } from './dto/update-recycler.dto';
+import { ClasificacionRecycler } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import {
   generarExcelRecyclers,
@@ -29,22 +30,29 @@ import { generarCertificadoPdf } from './utils/recycler-certificado.util';
 export class RecyclersController {
   constructor(private readonly recyclersService: RecyclersService) {}
 
+  // Las cinco dimensiones de filtro son independientes y se combinan
+  // entre sí (a diferencia de la antigua pestaña única y excluyente) —
+  // se puede filtrar por ruta, censo, clasificación y barrio a la vez.
   @Get()
   findAll(
-    @Query('tab')
-    tab?: 'con_ruta' | 'sin_ruta' | 'nuevos' | 'a_quitar' | 'desvinculados',
-    @Query('censado') censado?: string,
+    @Query('desvinculados') desvinculadosRaw?: string,
+    @Query('rutas') rutas?: 'con_ruta' | 'sin_ruta',
+    @Query('clasificacion') clasificacion?: ClasificacionRecycler,
+    @Query('censado') censadoRaw?: string,
+    @Query('barrioId') barrioId?: string,
     @Query('search') search?: string,
   ) {
-    const isCensado = censado !== undefined ? censado === 'true' : undefined;
-    return this.recyclersService.findAll({ tab, censado: isCensado, search });
-  }
-
-  // Conteos livianos para las tarjetas KPI — no trae recicladores
-  // completos ni sus barrios/microrrutas, solo cuenta filas.
-  @Get('kpis')
-  obtenerKpis() {
-    return this.recyclersService.obtenerKpis();
+    const desvinculados = desvinculadosRaw === 'true';
+    const censado =
+      censadoRaw !== undefined ? censadoRaw === 'true' : undefined;
+    return this.recyclersService.findAll({
+      desvinculados,
+      rutas,
+      clasificacion,
+      censado,
+      barrioId,
+      search,
+    });
   }
 
   @Post()
@@ -73,6 +81,18 @@ export class RecyclersController {
   @Patch(':id/reactivar')
   reactivate(@Param('id', ParseIntPipe) id: number) {
     return this.recyclersService.reactivate(id);
+  }
+
+  // Agrega una microrruta a las que ya tiene el reciclador, sin
+  // reemplazar la lista completa (a diferencia de PUT /recyclers/:id) —
+  // usado en el flujo de "¿asignar un trabajador?" justo después de crear
+  // una microrruta.
+  @Patch(':id/asignar-microrruta')
+  asignarMicrorruta(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('microrrutaId', ParseIntPipe) microrrutaId: number,
+  ) {
+    return this.recyclersService.asignarMicrorruta(id, microrrutaId);
   }
 
   @Get('exportar')

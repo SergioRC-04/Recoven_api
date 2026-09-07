@@ -27,24 +27,25 @@ export function parseTipoExportRecyclers(
 
 /**
  * Traduce el tipo de exportación a los filtros que ya entiende
- * RecyclersService.findAll — reutiliza exactamente la misma lógica de tabs
- * que ya tienes, no se duplica ninguna consulta.
+ * RecyclersService.findAll — reutiliza exactamente la misma lógica que ya
+ * usa la tabla del admin, no se duplica ninguna consulta.
  */
 export function mapearTipoAFiltrosFindAll(tipo: TipoExportRecyclers): {
-  tab?: 'con_ruta' | 'sin_ruta' | 'nuevos' | 'a_quitar' | 'desvinculados';
+  desvinculados?: boolean;
+  rutas?: 'con_ruta' | 'sin_ruta';
   censado?: boolean;
 } {
   switch (tipo) {
     case 'desvinculados':
-      return { tab: 'desvinculados' };
+      return { desvinculados: true };
     case 'censados':
       return { censado: true };
     case 'no_censados':
       return { censado: false };
     case 'con_ruta':
-      return { tab: 'con_ruta' };
+      return { rutas: 'con_ruta' };
     case 'sin_ruta':
-      return { tab: 'sin_ruta' };
+      return { rutas: 'sin_ruta' };
     case 'todos':
     default:
       return {};
