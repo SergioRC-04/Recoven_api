@@ -30,8 +30,30 @@ export class MicrorrutasController {
   findAll(
     @Query('barrioCod') barrioCod?: string,
     @Query('localidadCod') localidadCod?: string,
+    @Query('macrorrutaNumero') macrorrutaNumero?: string,
   ) {
-    return this.microrrutasService.findAll({ barrioCod, localidadCod });
+    return this.microrrutasService.findAll({
+      barrioCod,
+      localidadCod,
+      macrorrutaNumero,
+    });
+  }
+
+  // Lista de macrorrutas activas (con al menos una microrruta) — para
+  // poblar el select de filtro del admin. Sin guard, igual que findAll:
+  // esta info no es sensible y el mapa público podría llegar a
+  // necesitarla más adelante.
+  @Get('macrorrutas')
+  obtenerMacrorrutas() {
+    return this.microrrutasService.obtenerMacrorrutas();
+  }
+
+  // GeoJSON de las localidades con macrorruta activa, para el reporte en
+  // mapa de macrorrutas — cada feature trae su nombre y su número de
+  // macrorruta como propiedades, listo para dibujar sin más consultas.
+  @Get('macrorrutas/mapa')
+  obtenerMacrorrutasGeoJson() {
+    return this.microrrutasService.obtenerMacrorrutasGeoJson();
   }
 
   @UseGuards(JwtAuthGuard)
@@ -69,11 +91,13 @@ export class MicrorrutasController {
   async exportarExcel(
     @Query('barrioCod') barrioCod: string | undefined,
     @Query('localidadCod') localidadCod: string | undefined,
+    @Query('macrorrutaNumero') macrorrutaNumero: string | undefined,
     @Res() res: Response,
   ) {
     const buffer = await this.microrrutasService.exportarExcel({
       barrioCod,
       localidadCod,
+      macrorrutaNumero,
     });
     res.setHeader(
       'Content-Type',
@@ -91,12 +115,14 @@ export class MicrorrutasController {
   async exportarCapa(
     @Query('barrioCod') barrioCod: string | undefined,
     @Query('localidadCod') localidadCod: string | undefined,
+    @Query('macrorrutaNumero') macrorrutaNumero: string | undefined,
     @Query('formato') formato: string | undefined,
     @Res() res: Response,
   ) {
     const geojson = await this.microrrutasService.exportarCapaGeoJson({
       barrioCod,
       localidadCod,
+      macrorrutaNumero,
     });
     await responderExportGeo(
       res,

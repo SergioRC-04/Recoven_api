@@ -36,13 +36,13 @@ export class MicrorrutasService {
     return geojson;
   }
 
-  // Construye el WHERE de filtro espacial (barrio y/o localidad),
-  // compartido entre findAll (mapa/tabla, geometría en 4326) y
-  // exportarCapaGeoJson (GIS, geometría nativa en 9377) — así el filtro se
-  // mantiene idéntico en los dos casos sin duplicar la lógica.
+  // Construye el WHERE de filtro espacial (barrio, localidad y/o
+  // macrorruta), compartido entre findAll (mapa/tabla, geometría en
+  // 4326) y exportarCapaGeoJson (GIS, geometría nativa en 9377) — así el
+  // filtro se mantiene idéntico en los dos casos sin duplicar la lógica.
   //
-  // Los dos filtros se apoyan en microrruta_barrio (ya calculado y
-  // guardado al crear/redibujar cada ruta — ver
+  // barrioCod y localidadCod se apoyan en microrruta_barrio (ya calculado
+  // y guardado al crear/redibujar cada ruta — ver
   // microrrutas-barrios.util.ts), no en un ST_Intersects propio contra el
   // polígono del barrio o de la localidad. Antes, el filtro de localidad
   // SÍ hacía su propio ST_Intersects(m.geom, l.geom) — pero eso asume que
@@ -50,22 +50,27 @@ export class MicrorrutasService {
   // su localidad, y eso no es siempre cierto (un barrio agregado a mano
   // — como "Pinar del Río" — puede pertenecer administrativamente a una
   // localidad, vía localidad_cod, sin que su geometría real llegue a
-  // tocar el polígono oficial de esa localidad). El síntoma real: una
-  // ruta que se veía bien sin filtro, y bien al filtrar solo por barrio,
-  // desaparecía al combinar barrio + localidad — porque el chequeo de
-  // localidad fallaba aunque el de barrio (el que sí importa) pasara.
-  // Ahora "pertenece a la localidad X" se define como "pertenece a algún
-  // barrio cuyo localidad_cod es X" — la misma fuente que ya alimenta la
-  // columna "Barrio" de la tabla, así que filtro y columna nunca vuelven
-  // a poder contradecirse entre sí.
+  // tocar el polígono oficial de esa localidad). Ahora "pertenece a la
+  // localidad X" se define como "pertenece a algún barrio cuyo
+  // localidad_cod es X" — la misma fuente que ya alimenta la columna
+  // "Barrio" de la tabla, así que filtro y columna nunca vuelven a poder
+  // contradecirse entre sí.
+  //
+  // macrorrutaNumero es un filtro distinto: no depende de qué barrios
+  // toca la ruta, sino de a qué macrorruta quedó asignada
+  // (m.macrorruta_id, calculado también en microrrutas-barrios.util.ts a
+  // partir de en qué localidad cae la mayor parte de su trazo) — una
+  // ruta puede tocar barrios de dos localidades y aun así pertenecer a
+  // una sola macrorruta.
   //
   // Cada fragmento se arma con el tagged template Prisma.sql, que
   // parametriza los valores en vez de concatenarlos como texto — esto es
-  // lo que cierra la inyección: params.barrioCod/localidadCod nunca tocan
-  // la query como string, viajan como parámetros reales.
+  // lo que cierra la inyección: los parámetros nunca tocan la query como
+  // string, viajan como parámetros reales.
   private construirFiltroEspacial(params: {
     barrioCod?: string;
     localidadCod?: string;
+    macrorrutaNumero?: string;
   }): { joinClause: Prisma.Sql; whereClause: Prisma.Sql } {
     const whereConditions: Prisma.Sql[] = [];
 
@@ -88,11 +93,19 @@ export class MicrorrutasService {
       );
     }
 
+    if (params.macrorrutaNumero) {
+      whereConditions.push(
+        Prisma.sql`m.macrorruta_id = (
+          SELECT id FROM macrorrutas WHERE numero = ${params.macrorrutaNumero}
+        )`,
+      );
+    }
+
     return {
-      // Ya no hace falta ningún CROSS JOIN — las dos condiciones son
-      // subconsultas EXISTS autocontenidas. Se conserva joinClause en el
-      // valor de retorno (siempre vacío ahora) para no tener que tocar
-      // los dos SELECT que la interpolan más abajo.
+      // Ya no hace falta ningún CROSS JOIN — las condiciones son
+      // subconsultas autocontenidas. Se conserva joinClause en el valor
+      // de retorno (siempre vacío ahora) para no tener que tocar los dos
+      // SELECT que la interpolan más abajo.
       joinClause: Prisma.sql``,
       whereClause:
         whereConditions.length > 0
@@ -106,9 +119,19 @@ export class MicrorrutasService {
   // guardado al crear/redibujar la ruta — ver microrrutas-barrios.util.ts),
   // agregado con una LATERAL join independiente del filtro espacial de
   // arriba (ese filtro decide QUÉ microrrutas aparecen según el
-  // barrio/localidad consultado; esta agregación solo arma el array de
-  // barrios propios de cada una, sin importar el filtro).
-  async findAll(params: { barrioCod?: string; localidadCod?: string }) {
+  // barrio/localidad/macrorruta consultados; esta agregación solo arma el
+  // array de barrios propios de cada una, sin importar el filtro).
+  //
+  // macrorruta_numero y localidad_dominante_nombre vienen de un LEFT JOIN
+  // contra macrorrutas (por la FK directa m.macrorruta_id) y de ahí a
+  // localidades — LEFT, no INNER, porque una microrruta sin barrios
+  // asignados (o recién creada, antes de que corra el cálculo) puede no
+  // tener todavía macrorruta.
+  async findAll(params: {
+    barrioCod?: string;
+    localidadCod?: string;
+    macrorrutaNumero?: string;
+  }) {
     const { joinClause, whereClause } = this.construirFiltroEspacial(params);
 
     return this.prisma.$queryRaw`
@@ -117,11 +140,15 @@ export class MicrorrutasService {
       m.dir_fin, m.hora_fin, m.dist_pavimentada, m.dist_no_pavimentada,
       m.frecuencia, m.dias_frecuencia, m.estacion_transferencia, m.tipo_barrido,
       m.estado,
+      mac.numero AS macrorruta_numero,
+      ld.nombre AS localidad_dominante_nombre,
       ST_AsGeoJSON(ST_Transform(m.geom, 4326))::json AS geojson,
       ROUND((ST_Length(m.geom) / 1000)::numeric, 2) AS longitud_calculada_km,
       COALESCE(mb_agg.barrios, '[]'::json) AS barrios
     FROM microrrutas m
     ${joinClause}
+    LEFT JOIN macrorrutas mac ON mac.id = m.macrorruta_id
+    LEFT JOIN localidades ld ON ld.identificador = mac.localidad_cod
     LEFT JOIN LATERAL (
       SELECT json_agg(
         json_build_object(
@@ -196,18 +223,19 @@ export class MicrorrutasService {
   // Actualiza únicamente la geometría — usada tanto por el endpoint
   // dedicado (PUT /microrrutas/:id/geometria) como internamente por
   // update() cuando el payload trae un geojson nuevo. El recálculo de
-  // barrios vive aquí (no en cada llamador por separado) para que sea
-  // imposible cambiar el trazo sin que los barrios se recalculen.
+  // barrios (y, encadenado a partir de ellos, de la localidad dominante y
+  // la macrorruta — ver microrrutas-barrios.util.ts) vive aquí, no en
+  // cada llamador por separado, para que sea imposible cambiar el trazo
+  // sin que ambos se recalculen.
   //
   // dist_pavimentada (campo 8 del reporte SUI) también se recalcula aquí,
   // a partir de la longitud real del trazo NUEVO — antes se quedaba fija
   // en el valor calculado la última vez que se guardó (al crear la ruta, o
   // al editar los datos completos desde el formulario), así que redibujar
   // SOLO el trazo desde el mapa dejaba ese campo con la longitud del trazo
-  // VIEJO. dist_no_pavimentada se reinicia a 0: no hay forma de saber
-  // cuánto del trazo nuevo es sin pavimentar a partir de cuánto lo era el
-  // viejo (pueden no corresponder en nada) — si aplica, hay que
-  // especificarlo de nuevo a mano desde el formulario de datos.
+  // VIEJO. dist_no_pavimentada NO se toca — se resta del nuevo total tal
+  // cual está guardada, mismo criterio que ya usa el formulario al crear
+  // una ruta (total del trazo dibujado menos no pavimentada).
   //
   // Los tipos 3 (limpieza de playas), 4 (corte de césped) y 5 (poda de
   // árboles) siempre van en 0 por regla del SUI — misma lista que ya usa
@@ -234,10 +262,18 @@ export class MicrorrutasService {
       !microrruta || !TIPOS_SIN_DISTANCIAS_VIALES.includes(microrruta.tipo);
 
     if (requiereDistancia) {
+      // dist_no_pavimentada NO se toca — se conserva el valor ya cargado.
+      // dist_pavimentada se recalcula como el nuevo total del trazo menos
+      // esa distancia sin pavimentar (mismo criterio que se usa al crear
+      // la ruta), con GREATEST(...,0) por si la ruta quedó más corta que
+      // el valor de no pavimentada ya guardado, para no terminar con un
+      // número negativo.
       await this.prisma.$executeRaw`
         UPDATE microrrutas
-        SET dist_pavimentada = ROUND((ST_Length(geom) / 1000)::numeric, 2),
-            dist_no_pavimentada = 0
+        SET dist_pavimentada = GREATEST(
+              ROUND((ST_Length(geom) / 1000)::numeric, 2) - COALESCE(dist_no_pavimentada, 0),
+              0
+            )
         WHERE id = ${id};
       `;
     } else {
@@ -278,9 +314,72 @@ export class MicrorrutasService {
     });
   }
 
+  // Lista de macrorrutas para el filtro del admin — solo las que de
+  // verdad tienen al menos una microrruta cayendo mayoritariamente en su
+  // localidad ahora mismo (HAVING COUNT > 0). Una macrorruta ya creada en
+  // el pasado, cuya localidad se quedó sin ninguna microrruta, sigue
+  // existiendo en la tabla (nunca se borra, ver
+  // microrrutas-barrios.util.ts) pero deja de aparecer aquí — así "si en
+  // una localidad no hay microrrutas no va a haber macrorruta tampoco" se
+  // cumple sin necesidad de un borrado activo.
+  async obtenerMacrorrutas() {
+    return this.prisma.$queryRaw<
+      Array<{
+        numero: string;
+        localidad_cod: string;
+        localidad_nombre: string;
+        total: number;
+      }>
+    >`
+      SELECT mac.numero, mac.localidad_cod, l.nombre AS localidad_nombre,
+             COUNT(m.id)::int AS total
+      FROM macrorrutas mac
+      JOIN localidades l ON l.identificador = mac.localidad_cod
+      LEFT JOIN microrrutas m ON m.macrorruta_id = mac.id
+      GROUP BY mac.numero, mac.localidad_cod, l.nombre
+      HAVING COUNT(m.id) > 0
+      ORDER BY l.nombre;
+    `;
+  }
+
+  // GeoJSON de las localidades con macrorruta activa (mismo criterio que
+  // obtenerMacrorrutas: al menos una microrruta cayendo mayoritariamente
+  // ahí) — para el mapa de macrorrutas. Reutiliza la geometría de
+  // Localidades tal cual (reproyectada a 4326), no se guarda ninguna
+  // geometría propia por macrorruta.
+  async obtenerMacrorrutasGeoJson() {
+    const rows = await this.prisma.$queryRaw<Array<{ geojson: string }>>`
+    SELECT json_build_object(
+      'type', 'FeatureCollection',
+      'features', COALESCE(json_agg(
+        json_build_object(
+          'type', 'Feature',
+          'properties', json_build_object(
+            'identificador', sub.identificador,
+            'nombre', sub.nombre,
+            'macrorrutaNumero', sub.numero
+          ),
+          'geometry', ST_AsGeoJSON(ST_Transform(sub.geom, 4326))::json
+        )
+      ), '[]'::json)
+    )::text AS geojson
+    FROM (
+      SELECT l.identificador, l.nombre, mac.numero, l.geom
+      FROM macrorrutas mac
+      JOIN localidades l ON l.identificador = mac.localidad_cod
+      WHERE EXISTS (
+        SELECT 1 FROM microrrutas m WHERE m.macrorruta_id = mac.id
+      )
+    ) sub;
+  `;
+
+    return JSON.parse(rows[0].geojson) as GeoJsonFeatureCollection;
+  }
+
   async exportarExcel(params: {
     barrioCod?: string;
     localidadCod?: string;
+    macrorrutaNumero?: string;
   }): Promise<Buffer> {
     // Reutiliza la misma consulta de findAll (mismo filtro, mismo orden) para
     // que el Excel siempre coincida con lo que se ve en la tabla del admin.
@@ -351,6 +450,7 @@ export class MicrorrutasService {
   async exportarCapaGeoJson(params: {
     barrioCod?: string;
     localidadCod?: string;
+    macrorrutaNumero?: string;
   }) {
     const { joinClause, whereClause } = this.construirFiltroEspacial(params);
 

@@ -132,6 +132,11 @@ model Localidades {
   areaShape     Float?                                      @map("st_area_shape")
   geom          Unsupported("geometry(MultiPolygon, 9377)")?
   barrios       Barrios[]
+  // Opcional a propósito: una localidad solo tiene macrorruta si al menos
+  // una microrruta cae mayoritariamente en ella (ver
+  // microrrutas-barrios.util.ts) — la mayoría de localidades pueden no
+  // tener ninguna.
+  macrorruta    Macrorruta?
 
   @@index([geom], type: Gist, map: "localidades_geom_idx")
   @@map("localidades")
@@ -230,6 +235,20 @@ model Microrruta {
   tipoBarrido           Int?             @map("tipo_barrido")
   estado                EstadoMicrorruta @default(BORRADOR)
 
+  // Localidad donde la microrruta cubre la MAYOR longitud de su trazo —
+  // calculada geométricamente (ver microrrutas-barrios.util.ts), no
+  // editable a mano. Es la localidad "dueña" de la macrorruta de esta
+  // ruta (ver modelo Macrorruta). Nullable: puede no haberse calculado
+  // todavía, o la ruta puede no tener ningún barrio asignado.
+  // Referencia directa a la macrorruta de esta ruta — NO un campo de
+  // localidad propio: Macrorruta ya trae su localidad adentro
+  // (Macrorruta.localidadCod), así que este campo no repite esa
+  // información, solo dice A CUÁL macrorruta pertenece la ruta.
+  // Nullable: puede no haberse calculado todavía, o la ruta puede no
+  // tener ningún barrio asignado.
+  macrorrutaId Int?        @map("macrorruta_id")
+  macrorruta   Macrorruta? @relation(fields: [macrorrutaId], references: [id])
+
   // Geometría PostGIS guardada en EPSG:9377
   geom Unsupported("geometry(LineString, 9377)")?
 
@@ -276,4 +295,28 @@ model MicrorrutaBarrio {
 
   @@id([microrrutaId, barrioId])
   @@map("microrruta_barrio")
+}
+
+// Una macrorruta ES una localidad — solo puede haber una por localidad
+// (localidadCod es único). Se crea sola, la primera vez que una
+// microrruta cae mayoritariamente en esa localidad (ver
+// microrrutas-barrios.util.ts) — nunca se crea a mano, y una vez creada
+// nunca se borra ni se le cambia el número, aunque su localidad se quede
+// momentáneamente sin ninguna microrruta asignada. No guarda ninguna
+// geometría propia: reutiliza la de su localidad (Localidades.geom) para
+// el reporte en mapa, así que no hay coordenadas duplicadas en ningún
+// lado.
+model Macrorruta {
+  id           Int          @id @default(autoincrement())
+  // 8 dígitos aleatorios (no correlativo) — se ve más "profesional" que
+  // un simple 10000001, 10000002... Nullable solo en teoría (el código
+  // siempre lo genera antes de insertar la fila), se deja así por si
+  // algún día se necesita crear una fila sin número de inmediato.
+  numero       String?      @unique @db.VarChar(8)
+  localidadCod String       @unique @map("localidad_cod") @db.VarChar(10)
+  localidad    Localidades  @relation(fields: [localidadCod], references: [identificador])
+  microrrutas  Microrruta[]
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  @@map("macrorrutas")
 }

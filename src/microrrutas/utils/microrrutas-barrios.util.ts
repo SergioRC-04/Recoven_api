@@ -22,8 +22,17 @@
 //    ninguno — se cae a un respaldo: se usa la intersección real, sin
 //    erosionar, contra el mismo mínimo. Ahí sí calificarán ambos barrios,
 //    reflejando honestamente que la ruta corre sobre su frontera común.
+//
+// Además, al final determina y guarda la MACRORRUTA de la ruta: la
+// localidad "dueña" es simplemente la del barrio seleccionado con mayor
+// longitud_real — cada barrio ya sabe a qué localidad pertenece
+// (Barrios.localidadCod), así que no hace falta ninguna consulta
+// geométrica aparte contra el polígono de la localidad. Si todos los
+// barrios de la ruta son de la misma localidad (el caso normal), esto
+// simplemente devuelve esa localidad sin ambigüedad.
 
 import type { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 // Profundidad de la erosión, en metros (negativo: encoge el polígono hacia
 // adentro). ~8m se acerca al ancho de una calle residencial en
@@ -37,10 +46,93 @@ const BUFFER_EROSION_M = -8;
 // metros más allá del buffer cuente como "la ruta pasa por ahí").
 const LONGITUD_MINIMA_M = 25;
 
+// Cuántas veces reintentar generar un número de macrorruta aleatorio si
+// choca con uno ya existente — con ~90 millones de combinaciones posibles
+// y apenas un puñado de localidades en total, un choque es prácticamente
+// imposible, pero el número es único en la tabla y hay que cubrir el caso.
+const MAX_INTENTOS_NUMERO_MACRORRUTA = 10;
+
 interface CandidatoBarrio {
   barrio_id: string;
+  localidad_cod: string;
   longitud_erosionada: number;
   longitud_real: number;
+}
+
+/**
+ * Genera un número de macrorruta aleatorio de 8 dígitos (entre 10000000 y
+ * 99999999 — nunca empieza en 0, para que sean siempre 8 dígitos de
+ * verdad y no un número más corto con ceros a la izquierda). Se ve más
+ * "profesional" que un simple correlativo (10000001, 10000002, ...) sin
+ * dejar de ser un valor de 8 dígitos único y estable una vez asignado.
+ */
+function generarNumeroMacrorrutaAleatorio(): string {
+  const numero = Math.floor(10_000_000 + Math.random() * 90_000_000);
+  return String(numero);
+}
+
+/**
+ * Encuentra la macrorruta de una localidad, creándola si todavía no
+ * existe, y devuelve su id — para que el llamador lo guarde directo en
+ * microrruta.macrorrutaId. Cada macrorruta ES una localidad
+ * (localidadCod es único en la tabla), así que nunca se crea una segunda
+ * para la misma. No se borra nunca una macrorruta ya creada — si más
+ * adelante otra microrruta vuelve a caer en esa misma localidad,
+ * reutiliza el mismo id/número en vez de generar uno nuevo, y si
+ * mientras tanto ninguna microrruta cae ahí, la fila simplemente no se
+ * referencia desde ningún lado (no aparece en el mapa ni en los
+ * filtros, sin necesidad de borrarla).
+ */
+async function obtenerOCrearMacrorruta(
+  prisma: PrismaClient,
+  localidadCod: string,
+): Promise<number> {
+  const existente = await prisma.macrorruta.findUnique({
+    where: { localidadCod },
+  });
+  if (existente) return existente.id;
+
+  for (let intento = 0; intento < MAX_INTENTOS_NUMERO_MACRORRUTA; intento++) {
+    const numero = generarNumeroMacrorrutaAleatorio();
+    try {
+      const creada = await prisma.macrorruta.create({
+        data: { localidadCod, numero },
+      });
+      return creada.id;
+    } catch (error) {
+      // P2002 = violación de restricción única — el número aleatorio ya
+      // estaba tomado por otra macrorruta. Se reintenta con uno nuevo.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw new Error(
+    `No se pudo generar un número de macrorruta único para la localidad ${localidadCod} ` +
+      `tras ${MAX_INTENTOS_NUMERO_MACRORRUTA} intentos.`,
+  );
+}
+
+/**
+ * Localidad "dueña" de la macrorruta de la ruta: la del barrio
+ * seleccionado (ver seleccionados más abajo) con mayor longitud_real. No
+ * hace falta ninguna consulta aparte — cada candidato ya trae su propio
+ * localidad_cod desde la misma consulta que decide qué barrios le
+ * pertenecen a la ruta.
+ */
+function elegirLocalidadDominante(
+  seleccionados: CandidatoBarrio[],
+): string | null {
+  if (seleccionados.length === 0) return null;
+  const conMasLongitud = seleccionados.reduce((mejor, actual) =>
+    actual.longitud_real > mejor.longitud_real ? actual : mejor,
+  );
+  return conMasLongitud.localidad_cod;
 }
 
 export async function calcularYGuardarBarriosMicrorruta(
@@ -50,6 +142,7 @@ export async function calcularYGuardarBarriosMicrorruta(
   const candidatos = await prisma.$queryRaw<CandidatoBarrio[]>`
     SELECT
       b.identificador AS barrio_id,
+      b.localidad_cod AS localidad_cod,
       COALESCE(
         ST_Length(ST_Intersection(m.geom, ST_Buffer(b.geom, ${BUFFER_EROSION_M}))),
         0
@@ -91,4 +184,19 @@ export async function calcularYGuardarBarriosMicrorruta(
         ]
       : []),
   ]);
+
+  // Depende de `seleccionados` recién calculado arriba — no de una
+  // consulta nueva ni de MicrorrutaBarrio ya guardado, así que puede
+  // correr inmediatamente después, sin esperar a que la transacción se
+  // refleje en una lectura posterior.
+  const localidadDominante = elegirLocalidadDominante(seleccionados);
+
+  const macrorrutaId = localidadDominante
+    ? await obtenerOCrearMacrorruta(prisma, localidadDominante)
+    : null;
+
+  await prisma.microrruta.update({
+    where: { id: microrrutaId },
+    data: { macrorrutaId },
+  });
 }
