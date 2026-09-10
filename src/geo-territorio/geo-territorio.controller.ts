@@ -1,7 +1,11 @@
 import { Controller, Get, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { GeoTerritorioService } from './geo-territorio.service';
-import { FilterBarriosDto, FilterViasDto } from './dto/geo-territorio.dto';
+import {
+  FilterLocalidadesDto,
+  FilterBarriosDto,
+  FilterViasDto,
+} from './dto/geo-territorio.dto';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
   responderExportGeo,
@@ -14,8 +18,8 @@ export class GeoTerritorioController {
 
   @SkipThrottle()
   @Get('localidades')
-  async getLocalidades() {
-    return this.geoTerritorioService.getLocalidadesGeoJson();
+  async getLocalidades(@Query() query: FilterLocalidadesDto) {
+    return this.geoTerritorioService.getLocalidadesGeoJson(query);
   }
 
   @SkipThrottle()
@@ -33,11 +37,12 @@ export class GeoTerritorioController {
   @SkipThrottle()
   @Get('localidades/exportar')
   async exportarLocalidades(
+    @Query() query: FilterLocalidadesDto,
     @Query('formato') formato: string | undefined,
     @Res() res: Response,
   ) {
     const geojson =
-      await this.geoTerritorioService.getLocalidadesGeoJsonNativo();
+      await this.geoTerritorioService.getLocalidadesGeoJsonNativo(query);
     await responderExportGeo(
       res,
       geojson,

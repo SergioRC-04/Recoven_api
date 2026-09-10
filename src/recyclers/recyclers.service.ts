@@ -9,6 +9,7 @@ import { UpdateRecyclerDto } from './dto/update-recycler.dto';
 import {
   EstadoVinculacion,
   ClasificacionRecycler,
+  Municipio,
   Prisma,
 } from '@prisma/client';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -54,16 +55,30 @@ export class RecyclersService {
   // ruta" + "censados" a la vez. search ahora también hace match contra
   // el nombre del barrio y el nombre de la ruta asignados a cada
   // reciclador, no solo nombre/cédula.
+  //
+  // municipio ("BARRANQUILLA" | "PUERTO_COLOMBIA") se apoya en la MISMA
+  // relación que barrioId (Recycler -> RecyclerBarrio -> Barrio), solo
+  // que sube un nivel más hasta Localidad.municipio — no hace falta una
+  // consulta aparte, Prisma arma el JOIN encadenado con este filtro
+  // anidado.
   async findAll(filters: {
     desvinculados?: boolean;
     rutas?: 'con_ruta' | 'sin_ruta';
     clasificacion?: ClasificacionRecycler;
     censado?: boolean;
     barrioId?: string;
+    municipio?: Municipio;
     search?: string;
   }) {
-    const { desvinculados, rutas, clasificacion, censado, barrioId, search } =
-      filters;
+    const {
+      desvinculados,
+      rutas,
+      clasificacion,
+      censado,
+      barrioId,
+      municipio,
+      search,
+    } = filters;
 
     const andConditions: Prisma.RecyclerWhereInput[] = [];
 
@@ -94,6 +109,18 @@ export class RecyclersService {
 
     if (barrioId) {
       andConditions.push({ barrios: { some: { barrioId } } });
+    }
+
+    if (municipio) {
+      andConditions.push({
+        barrios: {
+          some: {
+            barrio: {
+              localidadRel: { municipio },
+            },
+          },
+        },
+      });
     }
 
     if (search) {

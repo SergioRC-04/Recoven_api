@@ -63,6 +63,11 @@ export class MicrorrutasService {
   // ruta puede tocar barrios de dos localidades y aun así pertenecer a
   // una sola macrorruta.
   //
+  // municipio ("BARRANQUILLA" | "PUERTO_COLOMBIA") es el filtro más
+  // amplio de los cuatro — igual que localidadCod, se apoya en
+  // microrruta_barrio, solo que sube un nivel más (barrio -> localidad ->
+  // municipio) en vez de comparar el código de localidad directamente.
+  //
   // Cada fragmento se arma con el tagged template Prisma.sql, que
   // parametriza los valores en vez de concatenarlos como texto — esto es
   // lo que cierra la inyección: los parámetros nunca tocan la query como
@@ -71,6 +76,7 @@ export class MicrorrutasService {
     barrioCod?: string;
     localidadCod?: string;
     macrorrutaNumero?: string;
+    municipio?: string;
   }): { joinClause: Prisma.Sql; whereClause: Prisma.Sql } {
     const whereConditions: Prisma.Sql[] = [];
 
@@ -97,6 +103,17 @@ export class MicrorrutasService {
       whereConditions.push(
         Prisma.sql`m.macrorruta_id = (
           SELECT id FROM macrorrutas WHERE numero = ${params.macrorrutaNumero}
+        )`,
+      );
+    }
+
+    if (params.municipio) {
+      whereConditions.push(
+        Prisma.sql`EXISTS (
+          SELECT 1 FROM microrruta_barrio mb
+          JOIN barrios b3 ON b3.identificador = mb.barrio_id
+          JOIN localidades l3 ON l3.identificador = b3.localidad_cod
+          WHERE mb.microrruta_id = m.id AND l3.municipio = ${params.municipio}::"Municipio"
         )`,
       );
     }
@@ -131,6 +148,7 @@ export class MicrorrutasService {
     barrioCod?: string;
     localidadCod?: string;
     macrorrutaNumero?: string;
+    municipio?: string;
   }) {
     const { joinClause, whereClause } = this.construirFiltroEspacial(params);
 
@@ -380,6 +398,7 @@ export class MicrorrutasService {
     barrioCod?: string;
     localidadCod?: string;
     macrorrutaNumero?: string;
+    municipio?: string;
   }): Promise<Buffer> {
     // Reutiliza la misma consulta de findAll (mismo filtro, mismo orden) para
     // que el Excel siempre coincida con lo que se ve en la tabla del admin.
@@ -451,6 +470,7 @@ export class MicrorrutasService {
     barrioCod?: string;
     localidadCod?: string;
     macrorrutaNumero?: string;
+    municipio?: string;
   }) {
     const { joinClause, whereClause } = this.construirFiltroEspacial(params);
 

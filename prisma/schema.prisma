@@ -124,6 +124,17 @@ model Pqrsdf {
   @@map("pqrsdf")
 }
 
+// Puerto Colombia no se divide en "localidades" como Barranquilla (que
+// tiene 5) — por ahora se modela como UNA sola fila de Localidades que
+// cubre todo el municipio (identificador 'PC-000'), etiquetada con
+// municipio = PUERTO_COLOMBIA. Es temporal: si más adelante hace falta
+// subdividir por corregimiento, cada uno pasaría a ser una fila más de
+// Localidades con el mismo municipio, sin reestructurar nada.
+enum Municipio {
+  BARRANQUILLA
+  PUERTO_COLOMBIA
+}
+
 model Localidades {
   id            String                                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   objectId      Int                                         @map("object_id")
@@ -131,6 +142,9 @@ model Localidades {
   identificador String                                      @unique @db.VarChar(10)
   areaShape     Float?                                      @map("st_area_shape")
   geom          Unsupported("geometry(MultiPolygon, 9377)")?
+  // Default BARRANQUILLA: todas las localidades existentes hoy son de
+  // Barranquilla — la migración las deja así sin tocar nada más.
+  municipio     Municipio                                   @default(BARRANQUILLA)
   barrios       Barrios[]
   // Opcional a propósito: una localidad solo tiene macrorruta si al menos
   // una microrruta cae mayoritariamente en ella (ver
@@ -235,11 +249,6 @@ model Microrruta {
   tipoBarrido           Int?             @map("tipo_barrido")
   estado                EstadoMicrorruta @default(BORRADOR)
 
-  // Localidad donde la microrruta cubre la MAYOR longitud de su trazo —
-  // calculada geométricamente (ver microrrutas-barrios.util.ts), no
-  // editable a mano. Es la localidad "dueña" de la macrorruta de esta
-  // ruta (ver modelo Macrorruta). Nullable: puede no haberse calculado
-  // todavía, o la ruta puede no tener ningún barrio asignado.
   // Referencia directa a la macrorruta de esta ruta — NO un campo de
   // localidad propio: Macrorruta ya trae su localidad adentro
   // (Macrorruta.localidadCod), así que este campo no repite esa

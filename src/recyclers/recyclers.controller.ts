@@ -16,7 +16,7 @@ import type { Response } from 'express';
 import { RecyclersService } from './recyclers.service';
 import { CreateRecyclerDto } from './dto/create-recycler.dto';
 import { UpdateRecyclerDto } from './dto/update-recycler.dto';
-import { ClasificacionRecycler } from '@prisma/client';
+import { ClasificacionRecycler, Municipio } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import {
   generarExcelRecyclers,
@@ -40,6 +40,7 @@ export class RecyclersController {
     @Query('clasificacion') clasificacion?: ClasificacionRecycler,
     @Query('censado') censadoRaw?: string,
     @Query('barrioId') barrioId?: string,
+    @Query('municipio') municipio?: Municipio,
     @Query('search') search?: string,
   ) {
     const desvinculados = desvinculadosRaw === 'true';
@@ -51,6 +52,7 @@ export class RecyclersController {
       clasificacion,
       censado,
       barrioId,
+      municipio,
       search,
     });
   }

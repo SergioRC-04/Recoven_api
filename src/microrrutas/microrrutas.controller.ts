@@ -31,11 +31,13 @@ export class MicrorrutasController {
     @Query('barrioCod') barrioCod?: string,
     @Query('localidadCod') localidadCod?: string,
     @Query('macrorrutaNumero') macrorrutaNumero?: string,
+    @Query('municipio') municipio?: string,
   ) {
     return this.microrrutasService.findAll({
       barrioCod,
       localidadCod,
       macrorrutaNumero,
+      municipio,
     });
   }
 
@@ -92,12 +94,14 @@ export class MicrorrutasController {
     @Query('barrioCod') barrioCod: string | undefined,
     @Query('localidadCod') localidadCod: string | undefined,
     @Query('macrorrutaNumero') macrorrutaNumero: string | undefined,
+    @Query('municipio') municipio: string | undefined,
     @Res() res: Response,
   ) {
     const buffer = await this.microrrutasService.exportarExcel({
       barrioCod,
       localidadCod,
       macrorrutaNumero,
+      municipio,
     });
     res.setHeader(
       'Content-Type',
@@ -116,6 +120,7 @@ export class MicrorrutasController {
     @Query('barrioCod') barrioCod: string | undefined,
     @Query('localidadCod') localidadCod: string | undefined,
     @Query('macrorrutaNumero') macrorrutaNumero: string | undefined,
+    @Query('municipio') municipio: string | undefined,
     @Query('formato') formato: string | undefined,
     @Res() res: Response,
   ) {
@@ -123,6 +128,7 @@ export class MicrorrutasController {
       barrioCod,
       localidadCod,
       macrorrutaNumero,
+      municipio,
     });
     await responderExportGeo(
       res,
