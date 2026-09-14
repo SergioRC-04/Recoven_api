@@ -46,8 +46,8 @@ export class MicrorrutasController {
   // esta info no es sensible y el mapa público podría llegar a
   // necesitarla más adelante.
   @Get('macrorrutas')
-  obtenerMacrorrutas() {
-    return this.microrrutasService.obtenerMacrorrutas();
+  obtenerMacrorrutas(@Query('municipio') municipio?: string) {
+    return this.microrrutasService.obtenerMacrorrutas(municipio);
   }
 
   // GeoJSON de las localidades con macrorruta activa, para el reporte en
@@ -110,6 +110,35 @@ export class MicrorrutasController {
     res.setHeader(
       'Content-Disposition',
       'attachment; filename="microrrutas.xlsx"',
+    );
+    res.send(buffer);
+  }
+
+  // Excel "espejo" de MicrorrutasTable.tsx (Nombre, Tipo, Fecha, Días,
+  // Trabajador, Barrio) — distinto de exportar-excel, que es el formato
+  // oficial del SUI con columnas numeradas.
+  @UseGuards(JwtAuthGuard)
+  @Get('exportar-tabla')
+  async exportarTabla(
+    @Query('barrioCod') barrioCod: string | undefined,
+    @Query('localidadCod') localidadCod: string | undefined,
+    @Query('macrorrutaNumero') macrorrutaNumero: string | undefined,
+    @Query('municipio') municipio: string | undefined,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.microrrutasService.exportarTablaExcel({
+      barrioCod,
+      localidadCod,
+      macrorrutaNumero,
+      municipio,
+    });
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="microrrutas-tabla.xlsx"',
     );
     res.send(buffer);
   }

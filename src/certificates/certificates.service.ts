@@ -75,11 +75,14 @@ export class CertificatesService {
         .getPublicUrl(nombreUnico);
       const urlArchivoPublica = publicUrlData.publicUrl;
 
+      // Ya no se le pasa `file` — el correo ya no adjunta el documento
+      // completo (ver mail.service.ts), solo el QR y el enlace, para no
+      // repetir la subida de esos mismos bytes a través de Resend y
+      // arriesgar un timeout con archivos medianamente pesados.
       await this.mailService.sendCertificateEmail(
         empresa.correo,
         empresa.nombre,
         dto.tipo,
-        file,
         urlArchivoPublica,
       );
 

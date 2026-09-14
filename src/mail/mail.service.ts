@@ -106,11 +106,17 @@ export class MailService {
     });
   }
 
+  // Ya NO recibe el archivo (`file`) — antes se adjuntaba completo en
+  // base64 junto al correo, lo que hacía que Resend tardara demasiado con
+  // archivos medianamente pesados y terminara devolviendo un 408
+  // (timeout). El documento ya vive en Supabase Storage y
+  // `certificateUrl` apunta ahí; el QR y el enlace en el texto son
+  // suficientes para acceder a él, sin mover esos mismos bytes una
+  // segunda vez a través de Resend.
   async sendCertificateEmail(
     emailDestinatario: string,
     nombreEmpresa: string,
     tipo: 'PODA' | 'RESIDUOS',
-    file: Express.Multer.File,
     certificateUrl: string,
   ): Promise<void> {
     const esPoda = tipo === 'PODA';
@@ -138,10 +144,11 @@ Estimado equipo de ${nombreEmpresa},
 
 Cordial saludo por parte de RECOVEN ECA SAS ESP.
 
-Adjunto a este mensaje encontrará el ${tituloCertificado} ${parrafoDetalle}
+Ponemos a su disposición el ${tituloCertificado} ${parrafoDetalle}
 
-Puede verificar y consultar el documento digital escaneando el código QR en el correo o ingresando directamente a:
-${certificateUrl}
+Aquí está el archivo: ${certificateUrl}
+
+También puede acceder escaneando el código QR incluido en este correo.
 
 Atentamente,
 RECOVEN ECA SAS ESP
@@ -174,27 +181,18 @@ Barranquilla, Atlántico, Colombia
             
             <p>Cordial saludo por parte del equipo técnico y administrativo de <strong>RECOVEN ECA SAS ESP</strong>.</p>
             
-            <p>De manera formal y en cumplimiento de los estándares operativos, adjunto a este mensaje encontrará el <strong>${tituloCertificado}</strong> ${parrafoDetalle}</p>
+            <p>De manera formal y en cumplimiento de los estándares operativos, ponemos a su disposición el <strong>${tituloCertificado}</strong> ${parrafoDetalle}</p>
+
+            <p>Aquí está el archivo: <a href="${certificateUrl}" target="_blank" style="color: #059669; font-weight: 600; text-decoration: underline;">${certificateUrl}</a></p>
             
             <div style="background-color: #f9fafb; border: 1px dashed #10b981; border-radius: 8px; padding: 20px; margin: 25px 0; text-align: center;">
               <p style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold; color: #065f46;">
                 🔍 Verificación Digital con Código QR
               </p>
               <p style="margin: 0 0 15px 0; font-size: 12px; color: #4b5563;">
-                Escanee el siguiente código QR con la cámara de su dispositivo móvil para acceder al documento oficial guardado en nuestro servidor seguro:
+                También puede escanear el siguiente código QR con la cámara de su dispositivo móvil para acceder al documento:
               </p>
               <img src="cid:qrcode-certificate" alt="Código QR del Certificado" style="width: 180px; height: 180px; border-radius: 6px; border: 1px solid #e5e7eb; padding: 6px; background-color: #ffffff;" />
-              <p style="margin-top: 12px; font-size: 12px;">
-                <a href="${certificateUrl}" target="_blank" style="color: #059669; text-decoration: underline; font-weight: 500;">
-                  O haga clic aquí para abrir/descargar el certificado
-                </a>
-              </p>
-            </div>
-
-            <div style="background-color: #f9fafb; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 4px;">
-              <p style="margin: 0; font-size: 14px; color: #374151; font-weight: 500;">
-                ℹ️ El documento oficial firmado también ha sido anexado directamente como archivo adjunto a este correo electrónico.
-              </p>
             </div>
 
             <p style="font-size: 14px; color: #6b7280;">
@@ -214,11 +212,6 @@ Barranquilla, Atlántico, Colombia
       </html>
     `,
       attachments: [
-        {
-          filename: file.originalname,
-          content: file.buffer.toString('base64'),
-          contentType: file.mimetype,
-        },
         {
           filename: 'qr-certificado.png',
           content: qrBuffer.toString('base64'),

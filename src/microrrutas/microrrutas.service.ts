@@ -19,6 +19,34 @@ function formatearFechaDDMMYYYY(fecha: Date | string): string {
   return `${dd}-${mm}-${yyyy}`;
 }
 
+// Mismo criterio que formatearDiasFrecuenciaCorto() en types/microrruta.ts
+// del frontend y en recyclers-export.util.ts del backend — duplicado a
+// propósito, no importado: es un archivo de frontend, no compartido.
+// Convierte "1-3-5" en "LU MI VI"; el código 8 (Eventual) se muestra como
+// la palabra completa.
+const DIA_EVENTUAL = 8;
+const DIAS_FRECUENCIA_CORTOS: Record<number, string> = {
+  1: 'LU',
+  2: 'MA',
+  3: 'MI',
+  4: 'JU',
+  5: 'VI',
+  6: 'SA',
+  7: 'DO',
+};
+
+function formatearDiasFrecuenciaCorto(diasFrecuencia: string | null): string {
+  if (!diasFrecuencia) return '—';
+  return diasFrecuencia
+    .split('-')
+    .map((codigo) => {
+      const num = Number(codigo);
+      if (num === DIA_EVENTUAL) return 'Eventual';
+      return DIAS_FRECUENCIA_CORTOS[num] ?? codigo;
+    })
+    .join(' ');
+}
+
 @Injectable()
 export class MicrorrutasService {
   constructor(private prisma: PrismaService) {}
@@ -340,7 +368,11 @@ export class MicrorrutasService {
   // microrrutas-barrios.util.ts) pero deja de aparecer aquí — así "si en
   // una localidad no hay microrrutas no va a haber macrorruta tampoco" se
   // cumple sin necesidad de un borrado activo.
-  async obtenerMacrorrutas() {
+  // municipio filtra las macrorrutas por la ciudad de su localidad —
+  // igual criterio que el resto de filtros por municipio: se sube un
+  // nivel (localidad -> municipio) sin tocar la relación macrorruta ->
+  // localidad en sí.
+  async obtenerMacrorrutas(municipio?: string) {
     return this.prisma.$queryRaw<
       Array<{
         numero: string;
@@ -354,6 +386,7 @@ export class MicrorrutasService {
       FROM macrorrutas mac
       JOIN localidades l ON l.identificador = mac.localidad_cod
       LEFT JOIN microrrutas m ON m.macrorruta_id = mac.id
+      WHERE (${municipio}::text IS NULL OR l.municipio = ${municipio}::"Municipio")
       GROUP BY mac.numero, mac.localidad_cod, l.nombre
       HAVING COUNT(m.id) > 0
       ORDER BY l.nombre;
@@ -455,6 +488,91 @@ export class MicrorrutasService {
         c11: r.dias_frecuencia ?? '',
         c12: r.estacion_transferencia ?? '',
         c13: r.tipo_barrido ?? '',
+      });
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
+  }
+
+  // Excel "espejo" de lo que se ve en MicrorrutasTable.tsx (Nombre, Tipo,
+  // Fecha, Días, Trabajador, Barrio) — a diferencia de exportarExcel
+  // (formato oficial SUI, columnas numeradas 1-13), este es para uso
+  // interno/operativo, con encabezados legibles y en el mismo orden que
+  // la tabla del admin. Reutiliza findAll (mismo filtro) para que
+  // siempre coincida con lo que se ve en pantalla, y le suma la columna
+  // Trabajador con un join aparte contra recycler_microrruta — findAll no
+  // trae esa columna porque nada más la usa.
+  async exportarTablaExcel(params: {
+    barrioCod?: string;
+    localidadCod?: string;
+    macrorrutaNumero?: string;
+    municipio?: string;
+  }): Promise<Buffer> {
+    const rutas = (await this.findAll(params)) as Array<{
+      id: number;
+      nombre: string;
+      tipo: number;
+      fecha_operacion: Date | string | null;
+      dias_frecuencia: string | null;
+      barrios: Array<{ barrioNombre: string }>;
+    }>;
+
+    const rutasIds = rutas.map((r) => r.id);
+    const trabajadores =
+      rutasIds.length > 0
+        ? await this.prisma.$queryRaw<
+            Array<{ microrruta_id: number; nombreCompleto: string }>
+          >`
+            SELECT rm.microrruta_id, r."nombreCompleto"
+            FROM recycler_microrruta rm
+            JOIN recyclers r ON r.id = rm.recycler_id
+            WHERE rm.microrruta_id = ANY(${rutasIds});
+          `
+        : [];
+
+    // Mismo criterio que trabajadorPorMicrorrutaId en AdminMicrorrutas.tsx:
+    // si por algún motivo hay más de un trabajador asignado a la misma
+    // ruta, se queda con el primero que aparezca, no con una lista de
+    // varios nombres.
+    const trabajadorPorId = new Map<number, string>();
+    for (const t of trabajadores) {
+      if (!trabajadorPorId.has(t.microrruta_id)) {
+        trabajadorPorId.set(t.microrruta_id, t.nombreCompleto);
+      }
+    }
+
+    // Mismo orden alfabético que ya usa MicrorrutasTable.tsx.
+    const rutasOrdenadas = [...rutas].sort((a, b) =>
+      a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }),
+    );
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Microrrutas');
+
+    sheet.columns = [
+      { header: 'Nombre', key: 'nombre', width: 28 },
+      { header: 'Tipo', key: 'tipo', width: 8 },
+      { header: 'Fecha', key: 'fecha', width: 14 },
+      { header: 'Días', key: 'dias', width: 16 },
+      { header: 'Trabajador', key: 'trabajador', width: 26 },
+      { header: 'Barrio', key: 'barrio', width: 34 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+
+    for (const r of rutasOrdenadas) {
+      sheet.addRow({
+        nombre: r.nombre,
+        tipo: r.tipo,
+        fecha: r.fecha_operacion
+          ? formatearFechaDDMMYYYY(r.fecha_operacion)
+          : '',
+        dias: formatearDiasFrecuenciaCorto(r.dias_frecuencia),
+        trabajador: trabajadorPorId.get(r.id) ?? 'Sin asignar',
+        barrio:
+          r.barrios && r.barrios.length > 0
+            ? r.barrios.map((b) => b.barrioNombre).join(', ')
+            : '—',
       });
     }
 
