@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
 }
 
@@ -93,31 +93,31 @@ enum EstadoPqrsdf {
 }
 
 model Pqrsdf {
-  id                    String        @id @default(uuid())
-  radicado              String        @unique // Ejemplo: PQRS-202607-A1B2
-  tipo                  TipoPqrsdf
-  estado                EstadoPqrsdf  @default(RECIBIDO)
-  
+  id       String       @id @default(uuid())
+  radicado String       @unique // Ejemplo: PQRS-202607-A1B2
+  tipo     TipoPqrsdf
+  estado   EstadoPqrsdf @default(RECIBIDO)
+
   // Datos del Peticionario
-  nombreCompleto        String
-  tipoIdentificacion    String        // CC, NIT, CE, Pasaporte
-  numeroIdentificacion  String
-  email                 String
-  telefono              String?
-  direccion             String?
-  
+  nombreCompleto       String
+  tipoIdentificacion   String // CC, NIT, CE, Pasaporte
+  numeroIdentificacion String
+  email                String
+  telefono             String?
+  direccion            String?
+
   // Detalle de la solicitud
-  asunto                String
-  descripcion           String
-  urlArchivo            String?       // Documento adjunto cargado a Supabase
-  
+  asunto      String
+  descripcion String
+  urlArchivo  String? // Documento adjunto cargado a Supabase
+
   // Respuesta o Seguimiento Interno
-  respuesta             String?
-  urlRespuesta          String?
-  fechaRespuesta        DateTime?
-  
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  respuesta      String?
+  urlRespuesta   String?
+  fechaRespuesta DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([radicado])
   @@index([numeroIdentificacion])
@@ -136,15 +136,15 @@ enum Municipio {
 }
 
 model Localidades {
-  id            String                                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  objectId      Int                                         @map("object_id")
-  nombre        String                                      @db.VarChar(100)
-  identificador String                                      @unique @db.VarChar(10)
-  areaShape     Float?                                      @map("st_area_shape")
+  id            String                                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  objectId      Int                                          @map("object_id")
+  nombre        String                                       @db.VarChar(100)
+  identificador String                                       @unique @db.VarChar(10)
+  areaShape     Float?                                       @map("st_area_shape")
   geom          Unsupported("geometry(MultiPolygon, 9377)")?
   // Default BARRANQUILLA: todas las localidades existentes hoy son de
   // Barranquilla — la migración las deja así sin tocar nada más.
-  municipio     Municipio                                   @default(BARRANQUILLA)
+  municipio     Municipio                                    @default(BARRANQUILLA)
   barrios       Barrios[]
   // Opcional a propósito: una localidad solo tiene macrorruta si al menos
   // una microrruta cae mayoritariamente en ella (ver
@@ -157,17 +157,17 @@ model Localidades {
 }
 
 model Barrios {
-  id            String                                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  objectId      Int                                         @map("object_id")
-  identificador String                                      @unique @db.VarChar(20) // Agregado @unique para soportar la relación
-  nombre        String                                      @map("nombre_barrio") @db.VarChar(150)
-  nombrePieza   Int?                                        @map("nombre_pieza")
-  localidadCod  String                                      @map("localidad_cod") @db.VarChar(10)
-  observaciones String?                                     @db.VarChar(100)
-  areaShape     Float?                                      @map("st_area_shape")
+  id            String                                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  objectId      Int                                          @map("object_id")
+  identificador String                                       @unique @db.VarChar(20) // Agregado @unique para soportar la relación
+  nombre        String                                       @map("nombre_barrio") @db.VarChar(150)
+  nombrePieza   Int?                                         @map("nombre_pieza")
+  localidadCod  String                                       @map("localidad_cod") @db.VarChar(10)
+  observaciones String?                                      @db.VarChar(100)
+  areaShape     Float?                                       @map("st_area_shape")
   geom          Unsupported("geometry(MultiPolygon, 9377)")?
 
-  localidadRel Localidades?        @relation(fields: [localidadCod], references: [identificador])
+  localidadRel Localidades?       @relation(fields: [localidadCod], references: [identificador])
   recyclers    RecyclerBarrio[] // Relación opuesta agregada
   microrrutas  MicrorrutaBarrio[] // Relación opuesta con microrrutas
 
@@ -176,11 +176,11 @@ model Barrios {
 }
 
 model Vias {
-  id       String                                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  objectId Int                                            @map("object_id")
-  texto    String?                                        @db.VarChar(100)
-  abrTexto String?                                        @map("abr_texto") @db.VarChar(50)
-  shapeLen Float?                                         @map("shape_len")
+  id       String                                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  objectId Int                                             @map("object_id")
+  texto    String?                                         @db.VarChar(100)
+  abrTexto String?                                         @map("abr_texto") @db.VarChar(50)
+  shapeLen Float?                                          @map("shape_len")
   geom     Unsupported("geometry(MultiLineString, 9377)")?
 
   @@index([geom], type: Gist, map: "vias_geom_idx")
@@ -212,18 +212,18 @@ enum TipoDocumento {
 }
 
 model Recycler {
-  id                 Int                   @id @default(autoincrement())
-  tipoDocumento      TipoDocumento         @default(CEDULA_CIUDADANIA) @map("tipo_documento")
-  cedula             String                // ya NO lleva @unique aquí — ver @@unique abajo
-  nombreCompleto     String
-  censado            Boolean               @default(false)
-  estadoVinculacion  EstadoVinculacion     @default(ACTIVO)
-  clasificacion      ClasificacionRecycler @default(NUEVO)
-  detalleUbicacion   String?               @map("detalle_ubicacion") @db.VarChar(255)
-  deletedAt          DateTime?             @map("deleted_at")
-  createdAt          DateTime              @default(now()) @map("created_at")
-  updatedAt          DateTime              @updatedAt @map("updated_at")
-  fechaIngreso       DateTime              @default(dbgenerated("'2026-01-01'::timestamp")) @map("fecha_ingreso")
+  id                Int                   @id @default(autoincrement())
+  tipoDocumento     TipoDocumento         @default(CEDULA_CIUDADANIA) @map("tipo_documento")
+  cedula            String // ya NO lleva @unique aquí — ver @@unique abajo
+  nombreCompleto    String
+  censado           Boolean               @default(false)
+  estadoVinculacion EstadoVinculacion     @default(ACTIVO)
+  clasificacion     ClasificacionRecycler @default(NUEVO)
+  detalleUbicacion  String?               @map("detalle_ubicacion") @db.VarChar(255)
+  deletedAt         DateTime?             @map("deleted_at")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+  fechaIngreso      DateTime              @default(dbgenerated("'2026-01-01'::timestamp")) @map("fecha_ingreso")
 
   microrrutas RecyclerMicrorruta[]
   barrios     RecyclerBarrio[]
@@ -235,7 +235,7 @@ model Recycler {
 model Microrruta {
   id                    Int              @id @default(autoincrement())
   nombre                String           @unique
-  tipo                  Int              // 1 a 8 según SUI
+  tipo                  Int // 1 a 8 según SUI
   fechaOperacion        DateTime?        @map("fecha_operacion")
   dirInicio             String?          @map("dir_inicio")
   horaInicio            String?          @map("hora_inicio")
@@ -243,7 +243,7 @@ model Microrruta {
   horaFin               String?          @map("hora_fin")
   distPavimentada       Float?           @default(0) @map("dist_pavimentada")
   distNoPavimentada     Float?           @default(0) @map("dist_no_pavimentada")
-  frecuencia            Int?             
+  frecuencia            Int?
   diasFrecuencia        String?          @map("dias_frecuencia")
   estacionTransferencia Int?             @map("estacion_transferencia")
   tipoBarrido           Int?             @map("tipo_barrido")
@@ -261,13 +261,45 @@ model Microrruta {
   // Geometría PostGIS guardada en EPSG:9377
   geom Unsupported("geometry(LineString, 9377)")?
 
+  // Guía de calles auto-calculada a partir del trazo (ver
+  // microrrutas-vias.util.ts) — array de pasos en el orden real del
+  // recorrido, cada uno con al menos { orden, texto, abrTexto }. "texto"
+  // ya viene resuelto a "Tramo no identificado — seguir el mapa" cuando
+  // ningún tramo de vía cae dentro de la tolerancia, así que nunca queda
+  // un hueco silencioso en la guía. Se recalcula una sola vez, al crear
+  // la ruta o al redibujar su trazo — igual disparo que barrios/
+  // macrorruta — nunca en cada lectura. Datos estructurados a propósito
+  // (no un string ya redactado) para que el frontend y el PDF formateen
+  // el texto como necesiten sin volver a calcular nada.
+  guiaCalles Json? @map("guia_calles")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   recyclers RecyclerMicrorruta[]
   barrios   MicrorrutaBarrio[]
+  usuarios  UsuarioMicrorruta[]
 
   @@map("microrrutas")
+}
+
+// Persona atendida en una microrruta — su dirección y póliza de aseo, no
+// una cuenta de acceso al panel (de ahí el nombre completo, para no
+// confundirla con Admin). FK obligatoria: no tiene sentido un registro
+// de este tipo sin una microrruta a la que pertenezca, y se borra en
+// cascada si la microrruta se elimina.
+model UsuarioMicrorruta {
+  id           Int      @id @default(autoincrement())
+  direccion    String
+  poliza       String
+  detalles     String   @db.VarChar(500)
+  microrrutaId Int      @map("microrruta_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  microrruta Microrruta @relation(fields: [microrrutaId], references: [id], onDelete: Cascade)
+
+  @@map("usuarios_microrruta")
 }
 
 model RecyclerMicrorruta {

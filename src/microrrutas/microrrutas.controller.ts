@@ -73,6 +73,15 @@ export class MicrorrutasController {
     return this.microrrutasService.update(id, dto);
   }
 
+  // Guía de calles ya calculada para esta microrruta — usada por la
+  // sección Usuarios del admin (registro de direcciones/pólizas en
+  // campo). Requiere sesión igual que el resto del admin de microrrutas.
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/guia-calles')
+  obtenerGuiaCalles(@Param('id', ParseIntPipe) id: number) {
+    return this.microrrutasService.obtenerGuiaCalles(id);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Put(':id/geometria')
   updateGeom(

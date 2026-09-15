@@ -37,6 +37,16 @@ export class FilterViasDto {
   @IsOptional()
   @IsString()
   municipio?: string;
+
+  // Vías cercanas al trazo de UNA microrruta puntual — filtro por
+  // distancia real (ST_DWithin), no por intersección contra barrio/
+  // localidad, ya que el trazo dibujado a mano no calza exacto sobre
+  // ninguno de los dos. Independiente de los demás filtros. String (no
+  // number) porque llega crudo desde el query string, igual que
+  // barrioCod/localidadCod — se castea a entero en la consulta.
+  @IsOptional()
+  @IsString()
+  microrrutaId?: string;
 }
 
 export interface GeoJsonFeatureProperties {

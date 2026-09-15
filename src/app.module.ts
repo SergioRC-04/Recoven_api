@@ -12,6 +12,7 @@ import { LeadsModule } from './leads/leads.module';
 import { GeoTerritorioModule } from './geo-territorio/geo-territorio.module';
 import { MicrorrutasModule } from './microrrutas/microrrutas.module';
 import { RecyclersModule } from './recyclers/recyclers.module';
+import { UsuariosMicrorrutaModule } from './usuarios-microrruta/usuarios-microrruta.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { RecyclersModule } from './recyclers/recyclers.module';
     GeoTerritorioModule,
     MicrorrutasModule,
     RecyclersModule,
+    UsuariosMicrorrutaModule,
   ],
   providers: [
     {

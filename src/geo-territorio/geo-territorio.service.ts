@@ -6,6 +6,7 @@ import {
   FilterViasDto,
   GeoJsonFeatureCollection,
 } from './dto/geo-territorio.dto';
+import { TOLERANCIA_VIA_M } from '../microrrutas/utils/microrrutas-vias.util';
 
 @Injectable()
 export class GeoTerritorioService {
@@ -101,11 +102,18 @@ export class GeoTerritorioService {
    * por municipio (independiente de los otros dos — sirve para "todas las
    * vías de Puerto Colombia" sin elegir una localidad/barrio puntual; hoy
    * esto siempre da vacío para Puerto Colombia, porque no se cargó
-   * ninguna vía ahí).
+   * ninguna vía ahí), y/o por cercanía real a una microrruta puntual.
+   *
+   * microrrutaId es distinto de los otros tres: no filtra por
+   * intersección contra un polígono administrativo (ST_Intersects), sino
+   * por distancia real al trazo (ST_DWithin) con la misma tolerancia que
+   * usa microrrutas-vias.util.ts para calcular la guía de calles — el
+   * trazo dibujado a mano no calza exacto sobre ninguna vía oficial, así
+   * que "cercana a esta ruta" no puede depender de tocarla justo.
    */
   async getViasGeoJson(filters: FilterViasDto) {
     try {
-      const { localidadCod, barrioCod, municipio } = filters;
+      const { localidadCod, barrioCod, municipio, microrrutaId } = filters;
 
       const result = await this.prisma.$queryRaw<Array<{ geojson: string }>>`
         SELECT json_build_object(
@@ -125,16 +133,16 @@ export class GeoTerritorioService {
           ), '[]'::json)
         )::text AS geojson
         FROM vias v
-        WHERE 
+        WHERE
           (${barrioCod}::text IS NULL OR EXISTS (
-            SELECT 1 FROM barrios b 
-            WHERE b.identificador = ${barrioCod} 
+            SELECT 1 FROM barrios b
+            WHERE b.identificador = ${barrioCod}
             AND ST_Intersects(v.geom, b.geom)
           ))
           AND
           (${localidadCod}::text IS NULL OR EXISTS (
-            SELECT 1 FROM localidades l 
-            WHERE l.identificador = ${localidadCod} 
+            SELECT 1 FROM localidades l
+            WHERE l.identificador = ${localidadCod}
             AND ST_Intersects(v.geom, l.geom)
           ))
           AND
@@ -142,6 +150,12 @@ export class GeoTerritorioService {
             SELECT 1 FROM localidades l
             WHERE l.municipio = ${municipio}::"Municipio"
             AND ST_Intersects(v.geom, l.geom)
+          ))
+          AND
+          (${microrrutaId}::text IS NULL OR EXISTS (
+            SELECT 1 FROM microrrutas m
+            WHERE m.id = ${microrrutaId}::int
+            AND ST_DWithin(v.geom, m.geom, ${TOLERANCIA_VIA_M})
           ));
       `;
 
@@ -231,7 +245,7 @@ export class GeoTerritorioService {
 
   async getViasGeoJsonNativo(filters: FilterViasDto) {
     try {
-      const { localidadCod, barrioCod, municipio } = filters;
+      const { localidadCod, barrioCod, municipio, microrrutaId } = filters;
       const result = await this.prisma.$queryRaw<Array<{ geojson: string }>>`
       SELECT json_build_object(
         'type', 'FeatureCollection',
@@ -267,6 +281,12 @@ export class GeoTerritorioService {
           SELECT 1 FROM localidades l
           WHERE l.municipio = ${municipio}::"Municipio"
           AND ST_Intersects(v.geom, l.geom)
+        ))
+        AND
+        (${microrrutaId}::text IS NULL OR EXISTS (
+          SELECT 1 FROM microrrutas m
+          WHERE m.id = ${microrrutaId}::int
+          AND ST_DWithin(v.geom, m.geom, ${TOLERANCIA_VIA_M})
         ));
     `;
       return JSON.parse(result[0].geojson) as GeoJsonFeatureCollection;

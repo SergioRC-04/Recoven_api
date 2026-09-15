@@ -6,6 +6,7 @@ import { UpdateMicrorrutaDto } from './dto/update-microrruta.dto';
 import * as ExcelJS from 'exceljs';
 import { GeoJsonFeatureCollection } from 'src/geo-territorio/dto/geo-territorio.dto';
 import { calcularYGuardarBarriosMicrorruta } from './utils/microrrutas-barrios.util';
+import { calcularYGuardarGuiaCallesMicrorruta } from './utils/microrrutas-vias.util';
 
 function formatearFechaDDMMYYYY(fecha: Date | string): string {
   // fecha_operacion se guarda como medianoche UTC del día elegido —
@@ -50,6 +51,20 @@ function formatearDiasFrecuenciaCorto(diasFrecuencia: string | null): string {
 @Injectable()
 export class MicrorrutasService {
   constructor(private prisma: PrismaService) {}
+
+  // Guía de calles ya calculada al crear/redibujar la ruta (ver
+  // microrrutas-vias.util.ts) — esta lectura no recalcula nada, solo
+  // expone el campo guardado para la sección Usuarios del admin.
+  async obtenerGuiaCalles(id: number) {
+    const microrruta = await this.prisma.microrruta.findUnique({
+      where: { id },
+      select: { guiaCalles: true },
+    });
+    if (!microrruta) {
+      throw new BadRequestException('Microrruta no encontrada');
+    }
+    return microrruta.guiaCalles ?? [];
+  }
 
   // Extrae la geometría asegurando tipado estricto sin 'any'
   private extractGeometry(geojson: unknown): unknown {
@@ -186,6 +201,7 @@ export class MicrorrutasService {
       m.dir_fin, m.hora_fin, m.dist_pavimentada, m.dist_no_pavimentada,
       m.frecuencia, m.dias_frecuencia, m.estacion_transferencia, m.tipo_barrido,
       m.estado,
+      m.guia_calles,
       mac.numero AS macrorruta_numero,
       ld.nombre AS localidad_dominante_nombre,
       ST_AsGeoJSON(ST_Transform(m.geom, 4326))::json AS geojson,
@@ -255,6 +271,7 @@ export class MicrorrutasService {
       const nuevaId = result[0].id;
       if (geojsonStr) {
         await calcularYGuardarBarriosMicrorruta(this.prisma, nuevaId);
+        await calcularYGuardarGuiaCallesMicrorruta(this.prisma, nuevaId);
       }
 
       return result[0];
@@ -332,6 +349,7 @@ export class MicrorrutasService {
     }
 
     await calcularYGuardarBarriosMicrorruta(this.prisma, id);
+    await calcularYGuardarGuiaCallesMicrorruta(this.prisma, id);
 
     return { success: true };
   }
