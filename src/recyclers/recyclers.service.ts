@@ -8,6 +8,7 @@ import { CreateRecyclerDto } from './dto/create-recycler.dto';
 import { UpdateRecyclerDto } from './dto/update-recycler.dto';
 import {
   EstadoVinculacion,
+  EstadoMicrorruta,
   ClasificacionRecycler,
   Municipio,
   Prisma,
@@ -67,7 +68,7 @@ export class RecyclersService {
     clasificacion?: ClasificacionRecycler;
     censado?: boolean;
     barrioId?: string;
-    municipio?: Municipio;
+    municipio?: Municipio | 'SIN_CIUDAD';
     search?: string;
   }) {
     const {
@@ -111,7 +112,11 @@ export class RecyclersService {
       andConditions.push({ barrios: { some: { barrioId } } });
     }
 
-    if (municipio) {
+    // "SIN_CIUDAD" no es un valor del enum Municipio: son los recicladores
+    // sin ningún barrio asignado, que por eso no caen en ninguna ciudad.
+    if (municipio === 'SIN_CIUDAD') {
+      andConditions.push({ barrios: { none: {} } });
+    } else if (municipio) {
       andConditions.push({
         barrios: {
           some: {
@@ -254,7 +259,18 @@ export class RecyclersService {
           }
         }
 
+        let rutasAfectadas: number[] = [];
         if (microrrutasIds !== undefined) {
+          const previas = await tx.recyclerMicrorruta.findMany({
+            where: { recyclerId: id },
+            select: { microrrutaId: true },
+          });
+          rutasAfectadas = [
+            ...new Set([
+              ...previas.map((p) => p.microrrutaId),
+              ...microrrutasIds,
+            ]),
+          ];
           await tx.recyclerMicrorruta.deleteMany({ where: { recyclerId: id } });
           if (microrrutasIds.length > 0) {
             await tx.recyclerMicrorruta.createMany({
@@ -266,7 +282,7 @@ export class RecyclersService {
           }
         }
 
-        return tx.recycler.update({
+        const r = await tx.recycler.update({
           where: { id },
           data: {
             ...data,
@@ -275,6 +291,8 @@ export class RecyclersService {
             }),
           },
         });
+        await this.sincronizarEstadoMicrorrutas(tx, rutasAfectadas);
+        return r;
       });
 
       this.dispararRegeneracionReporteCertificados();
@@ -307,13 +325,75 @@ export class RecyclersService {
     return actualizado;
   }
 
+  // Mantiene el estado de las microrrutas dado quién las tiene asignadas:
+  // INACTIVA si tiene al menos un reciclador asignado y NINGUNO está activo
+  // (todos desvinculados); ACTIVA en cualquier otro caso — incluida una
+  // ruta sin ningún reciclador asignado, que es normal y debe seguir
+  // visible. Solo toca las rutas indicadas, nunca el resto. No borra nada:
+  // reactivar a un reciclador y volver a llamar esto la devuelve a ACTIVA.
+  private async sincronizarEstadoMicrorrutas(
+    client: Prisma.TransactionClient,
+    microrrutaIds: number[],
+  ) {
+    if (microrrutaIds.length === 0) return;
+
+    const [conActivo, conAlguno] = await Promise.all([
+      client.microrruta.findMany({
+        where: {
+          id: { in: microrrutaIds },
+          recyclers: {
+            some: {
+              recycler: {
+                deletedAt: null,
+                estadoVinculacion: EstadoVinculacion.ACTIVO,
+              },
+            },
+          },
+        },
+        select: { id: true },
+      }),
+      client.microrruta.findMany({
+        where: { id: { in: microrrutaIds }, recyclers: { some: {} } },
+        select: { id: true },
+      }),
+    ]);
+
+    const idsConActivo = new Set(conActivo.map((m) => m.id));
+    const inactivas = conAlguno
+      .map((m) => m.id)
+      .filter((id) => !idsConActivo.has(id));
+    const inactivasSet = new Set(inactivas);
+    const activas = microrrutaIds.filter((id) => !inactivasSet.has(id));
+
+    await client.microrruta.updateMany({
+      where: { id: { in: activas } },
+      data: { estado: EstadoMicrorruta.ACTIVA },
+    });
+    await client.microrruta.updateMany({
+      where: { id: { in: inactivas } },
+      data: { estado: EstadoMicrorruta.INACTIVA },
+    });
+  }
+
   async softDelete(id: number) {
-    const actualizado = await this.prisma.recycler.update({
-      where: { id },
-      data: {
-        estadoVinculacion: EstadoVinculacion.INACTIVO,
-        deletedAt: new Date(),
-      },
+    const actualizado = await this.prisma.$transaction(async (tx) => {
+      const r = await tx.recycler.update({
+        where: { id },
+        data: {
+          estadoVinculacion: EstadoVinculacion.INACTIVO,
+          deletedAt: new Date(),
+        },
+      });
+      // Sus rutas quedan INACTIVAS si no les queda otro reciclador activo.
+      const rutas = await tx.recyclerMicrorruta.findMany({
+        where: { recyclerId: id },
+        select: { microrrutaId: true },
+      });
+      await this.sincronizarEstadoMicrorrutas(
+        tx,
+        rutas.map((x) => x.microrrutaId),
+      );
+      return r;
     });
 
     // Un reciclador desvinculado ya no debe aparecer en el certificado
@@ -327,12 +407,24 @@ export class RecyclersService {
     const recycler = await this.prisma.recycler.findUnique({ where: { id } });
     if (!recycler) throw new NotFoundException('Reciclador no encontrado');
 
-    const actualizado = await this.prisma.recycler.update({
-      where: { id },
-      data: {
-        estadoVinculacion: EstadoVinculacion.ACTIVO,
-        deletedAt: null,
-      },
+    const actualizado = await this.prisma.$transaction(async (tx) => {
+      const r = await tx.recycler.update({
+        where: { id },
+        data: {
+          estadoVinculacion: EstadoVinculacion.ACTIVO,
+          deletedAt: null,
+        },
+      });
+      // Sus rutas vuelven a ACTIVA.
+      const rutas = await tx.recyclerMicrorruta.findMany({
+        where: { recyclerId: id },
+        select: { microrrutaId: true },
+      });
+      await this.sincronizarEstadoMicrorrutas(
+        tx,
+        rutas.map((x) => x.microrrutaId),
+      );
+      return r;
     });
 
     this.dispararRegeneracionReporteCertificados();
@@ -366,8 +458,11 @@ export class RecyclersService {
     });
 
     if (!yaAsignada) {
-      await this.prisma.recyclerMicrorruta.create({
-        data: { recyclerId, microrrutaId },
+      await this.prisma.$transaction(async (tx) => {
+        await tx.recyclerMicrorruta.create({
+          data: { recyclerId, microrrutaId },
+        });
+        await this.sincronizarEstadoMicrorrutas(tx, [microrrutaId]);
       });
     }
 

@@ -198,9 +198,14 @@ enum ClasificacionRecycler {
   A_QUITAR
 }
 
+// ACTIVA: la ruta se muestra en el mapa, tablas, reportes y exportaciones.
+// INACTIVA: se oculta de todo eso (sin borrar nada) — pasa a este estado
+// cuando todos los recicladores asignados a la ruta están desvinculados, y
+// vuelve a ACTIVA al reactivar a alguno (ver RecyclersService). Una ruta sin
+// ningún reciclador asignado sigue ACTIVA.
 enum EstadoMicrorruta {
-  BORRADOR
-  COMPLETO
+  ACTIVA
+  INACTIVA
 }
 
 enum TipoDocumento {
@@ -247,7 +252,7 @@ model Microrruta {
   diasFrecuencia        String?          @map("dias_frecuencia")
   estacionTransferencia Int?             @map("estacion_transferencia")
   tipoBarrido           Int?             @map("tipo_barrido")
-  estado                EstadoMicrorruta @default(BORRADOR)
+  estado                EstadoMicrorruta @default(ACTIVA)
 
   // Referencia directa a la macrorruta de esta ruta — NO un campo de
   // localidad propio: Macrorruta ya trae su localidad adentro

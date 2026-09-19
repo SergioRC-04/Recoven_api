@@ -40,7 +40,7 @@ export class RecyclersController {
     @Query('clasificacion') clasificacion?: ClasificacionRecycler,
     @Query('censado') censadoRaw?: string,
     @Query('barrioId') barrioId?: string,
-    @Query('municipio') municipio?: Municipio,
+    @Query('municipio') municipio?: Municipio | 'SIN_CIUDAD',
     @Query('search') search?: string,
   ) {
     const desvinculados = desvinculadosRaw === 'true';

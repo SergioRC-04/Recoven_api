@@ -22,6 +22,16 @@ import {
   parseFormatoExport,
 } from '../common/utils/geo-export.util';
 
+// Valor de ?estado= — cualquier cosa distinta de los tres valores válidos
+// cae al default (solo ACTIVA) en vez de llegar cruda a la consulta.
+function parseEstadoFiltro(
+  raw?: string,
+): 'ACTIVA' | 'INACTIVA' | 'TODAS' | undefined {
+  return raw === 'ACTIVA' || raw === 'INACTIVA' || raw === 'TODAS'
+    ? raw
+    : undefined;
+}
+
 @Controller('/microrrutas')
 export class MicrorrutasController {
   constructor(private readonly microrrutasService: MicrorrutasService) {}
@@ -32,12 +42,14 @@ export class MicrorrutasController {
     @Query('localidadCod') localidadCod?: string,
     @Query('macrorrutaNumero') macrorrutaNumero?: string,
     @Query('municipio') municipio?: string,
+    @Query('estado') estado?: string,
   ) {
     return this.microrrutasService.findAll({
       barrioCod,
       localidadCod,
       macrorrutaNumero,
       municipio,
+      estado: parseEstadoFiltro(estado),
     });
   }
 

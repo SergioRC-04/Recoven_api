@@ -115,13 +115,25 @@ export class MicrorrutasService {
   // parametriza los valores en vez de concatenarlos como texto — esto es
   // lo que cierra la inyección: los parámetros nunca tocan la query como
   // string, viajan como parámetros reales.
+  //
+  // estado: por defecto solo ACTIVA — una ruta INACTIVA (todos sus
+  // recicladores desvinculados) no aparece en mapa, tablas, reportes ni
+  // exportaciones salvo que se pida explícitamente 'INACTIVA' o 'TODAS'.
   private construirFiltroEspacial(params: {
     barrioCod?: string;
     localidadCod?: string;
     macrorrutaNumero?: string;
     municipio?: string;
+    estado?: 'ACTIVA' | 'INACTIVA' | 'TODAS';
   }): { joinClause: Prisma.Sql; whereClause: Prisma.Sql } {
     const whereConditions: Prisma.Sql[] = [];
+
+    const estado = params.estado ?? 'ACTIVA';
+    if (estado !== 'TODAS') {
+      whereConditions.push(
+        Prisma.sql`m.estado = ${estado}::"EstadoMicrorruta"`,
+      );
+    }
 
     if (params.barrioCod) {
       whereConditions.push(
@@ -192,6 +204,7 @@ export class MicrorrutasService {
     localidadCod?: string;
     macrorrutaNumero?: string;
     municipio?: string;
+    estado?: 'ACTIVA' | 'INACTIVA' | 'TODAS';
   }) {
     const { joinClause, whereClause } = this.construirFiltroEspacial(params);
 
@@ -260,7 +273,7 @@ export class MicrorrutasService {
         ${dto.diasFrecuencia ?? null}, 
         ${dto.estacionTransferencia ?? null}, 
         ${dto.tipoBarrido ?? null},
-        'BORRADOR'::"EstadoMicrorruta",
+        'ACTIVA'::"EstadoMicrorruta",
         ${geomSql},
         NOW(),
         NOW()
@@ -404,6 +417,7 @@ export class MicrorrutasService {
       FROM macrorrutas mac
       JOIN localidades l ON l.identificador = mac.localidad_cod
       LEFT JOIN microrrutas m ON m.macrorruta_id = mac.id
+        AND m.estado = 'ACTIVA'::"EstadoMicrorruta"
       WHERE (${municipio}::text IS NULL OR l.municipio = ${municipio}::"Municipio")
       GROUP BY mac.numero, mac.localidad_cod, l.nombre
       HAVING COUNT(m.id) > 0
@@ -437,7 +451,8 @@ export class MicrorrutasService {
       FROM macrorrutas mac
       JOIN localidades l ON l.identificador = mac.localidad_cod
       WHERE EXISTS (
-        SELECT 1 FROM microrrutas m WHERE m.macrorruta_id = mac.id
+        SELECT 1 FROM microrrutas m
+        WHERE m.macrorruta_id = mac.id AND m.estado = 'ACTIVA'::"EstadoMicrorruta"
       )
     ) sub;
   `;
@@ -545,7 +560,9 @@ export class MicrorrutasService {
             SELECT rm.microrruta_id, r."nombreCompleto"
             FROM recycler_microrruta rm
             JOIN recyclers r ON r.id = rm.recycler_id
-            WHERE rm.microrruta_id = ANY(${rutasIds});
+            WHERE rm.microrruta_id = ANY(${rutasIds})
+              AND r.deleted_at IS NULL
+              AND r."estadoVinculacion" = 'ACTIVO'::"EstadoVinculacion";
           `
         : [];
 
