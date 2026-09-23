@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Resend } from 'resend';
+import * as nodemailer from 'nodemailer';
 import * as QRCode from 'qrcode';
 
 interface Adjunto {
@@ -36,6 +37,17 @@ function aTexto(valor: unknown): string {
 @Injectable()
 export class MailService {
   private readonly resend: Resend;
+  // Solo para sendCertificateEmail (ver más abajo) — el resto de correos
+  // (código de verificación, PQRSDF, leads, avisos de error al admin)
+  // sigue por Resend con no-reply@recovenesp.com, sin cambios. Los
+  // certificados salen por SMTP de Gmail, autenticados con una cuenta
+  // real (GMAIL_USER + "Contraseña de aplicación", no la contraseña
+  // normal), para que lleguen con la reputación de envío de Gmail en vez
+  // de la de un dominio propio nuevo sin historial — problema detectado
+  // con destinatarios corporativos que descartaban el correo en
+  // silencio pese a que Resend lo marcaba como entregado.
+  private readonly transporterGmail: nodemailer.Transporter;
+  private readonly remitenteGmail: string;
 
   constructor() {
     const apiKey = process.env.RESEND_API_KEY;
@@ -43,6 +55,23 @@ export class MailService {
       throw new Error('Falta RESEND_API_KEY en las variables de entorno');
     }
     this.resend = new Resend(apiKey);
+
+    const gmailUser = process.env.GMAIL_USER;
+    const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
+    if (!gmailUser || !gmailAppPassword) {
+      throw new Error(
+        'Faltan GMAIL_USER o GMAIL_APP_PASSWORD en las variables de entorno',
+      );
+    }
+    this.transporterGmail = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: gmailUser, pass: gmailAppPassword },
+    });
+    // Sin nombre de remitente aparte (a diferencia del `from` de Resend,
+    // que sí podía ser cualquier dirección/nombre del dominio
+    // verificado) — Gmail exige que la dirección real sea la misma
+    // cuenta autenticada, así que el remitente es directo GMAIL_USER.
+    this.remitenteGmail = gmailUser;
   }
 
   // ⚠️ El SDK de Resend NO lanza excepciones — devuelve { data, error }
@@ -71,6 +100,38 @@ export class MailService {
     if (error) {
       throw new Error(`Resend: ${error.message}`);
     }
+  }
+
+  // Único punto que llama a transporterGmail.sendMail() — usado SOLO por
+  // sendCertificateEmail (ver más abajo). El resto de correos sigue por
+  // enviar()/Resend, sin tocar.
+  private async enviarPorGmail(params: {
+    to: string | string[];
+    subject: string;
+    html: string;
+    text?: string;
+    attachments?: {
+      filename: string;
+      content: string;
+      contentType?: string;
+      contentId?: string;
+    }[];
+  }): Promise<void> {
+    await this.transporterGmail.sendMail({
+      from: this.remitenteGmail,
+      to: params.to,
+      subject: params.subject,
+      html: params.html,
+      text: params.text,
+      attachments: params.attachments?.map((a) => ({
+        filename: a.filename,
+        content: a.content,
+        encoding: 'base64' as const,
+        contentType: a.contentType,
+        // nodemailer usa `cid`, no `contentId` — se traduce solo aquí.
+        cid: a.contentId,
+      })),
+    });
   }
 
   async sendMail(options: EnviarCorreoOptions): Promise<void> {
@@ -107,12 +168,13 @@ export class MailService {
   }
 
   // Ya NO recibe el archivo (`file`) — antes se adjuntaba completo en
-  // base64 junto al correo, lo que hacía que Resend tardara demasiado con
-  // archivos medianamente pesados y terminara devolviendo un 408
-  // (timeout). El documento ya vive en Supabase Storage y
-  // `certificateUrl` apunta ahí; el QR y el enlace en el texto son
-  // suficientes para acceder a él, sin mover esos mismos bytes una
-  // segunda vez a través de Resend.
+  // base64 junto al correo, lo que hacía que el envío tardara demasiado
+  // con archivos medianamente pesados y terminara en timeout. El
+  // documento ya vive en Supabase Storage y `certificateUrl` apunta ahí;
+  // el QR y el enlace en el texto son suficientes para acceder a él, sin
+  // mover esos mismos bytes una segunda vez por correo. Este método usa
+  // enviarPorGmail (no enviar/Resend) — ver el comentario del
+  // constructor sobre por qué.
   async sendCertificateEmail(
     emailDestinatario: string,
     nombreEmpresa: string,
@@ -155,7 +217,7 @@ RECOVEN ECA SAS ESP
 Barranquilla, Atlántico, Colombia
   `;
 
-    await this.enviar({
+    await this.enviarPorGmail({
       to: [emailDestinatario],
       subject,
       text: textoPlano,
