@@ -221,6 +221,10 @@ model Recycler {
   tipoDocumento     TipoDocumento         @default(CEDULA_CIUDADANIA) @map("tipo_documento")
   cedula            String // ya NO lleva @unique aquí — ver @@unique abajo
   nombreCompleto    String
+  // Nullable en la BD porque los recicladores ya existentes no tienen
+  // teléfono registrado; el formulario y el DTO de creación sí lo exigen
+  // para los nuevos (y para cualquiera que se edite).
+  telefono          String?               @db.VarChar(20)
   censado           Boolean               @default(false)
   estadoVinculacion EstadoVinculacion     @default(ACTIVO)
   clasificacion     ClasificacionRecycler @default(NUEVO)

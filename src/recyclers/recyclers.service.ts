@@ -180,6 +180,7 @@ export class RecyclersService {
       tipoDocumento: r.tipoDocumento,
       cedula: r.cedula,
       nombreCompleto: r.nombreCompleto,
+      telefono: r.telefono,
       censado: r.censado,
       clasificacion: r.clasificacion,
       detalleUbicacion: r.detalleUbicacion,
