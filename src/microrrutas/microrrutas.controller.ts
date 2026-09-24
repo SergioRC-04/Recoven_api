@@ -116,6 +116,7 @@ export class MicrorrutasController {
     @Query('localidadCod') localidadCod: string | undefined,
     @Query('macrorrutaNumero') macrorrutaNumero: string | undefined,
     @Query('municipio') municipio: string | undefined,
+    @Query('informe') informe: string | undefined,
     @Res() res: Response,
   ) {
     const buffer = await this.microrrutasService.exportarExcel({
@@ -123,6 +124,8 @@ export class MicrorrutasController {
       localidadCod,
       macrorrutaNumero,
       municipio,
+      informe:
+        informe === 'vigente' || informe === 'nuevo' ? informe : undefined,
     });
     res.setHeader(
       'Content-Type',

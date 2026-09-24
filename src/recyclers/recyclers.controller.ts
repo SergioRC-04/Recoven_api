@@ -11,6 +11,8 @@ import {
   ParseIntPipe,
   UseGuards,
   Res,
+  StreamableFile,
+  BadRequestException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { RecyclersService } from './recyclers.service';
@@ -24,6 +26,15 @@ import {
   mapearTipoAFiltrosFindAll,
 } from './utils/recyclers-export.util';
 import { generarCertificadoPdf } from './utils/recycler-certificado.util';
+
+function parseMunicipioCierre(raw?: string): Municipio {
+  if (raw === Municipio.BARRANQUILLA || raw === Municipio.PUERTO_COLOMBIA) {
+    return raw;
+  }
+  throw new BadRequestException(
+    'municipio debe ser BARRANQUILLA o PUERTO_COLOMBIA',
+  );
+}
 
 @UseGuards(JwtAuthGuard)
 @Controller('/recyclers')
@@ -116,6 +127,45 @@ export class RecyclersController {
       `attachment; filename="recicladores-${tipo}.xlsx"`,
     );
     res.send(buffer);
+  }
+
+  // Cierre de censo por ciudad — ver RecyclersService.cerrarCenso. Solo
+  // Barranquilla y Puerto Colombia (SIN_CIUDAD no tiene censo propio).
+  @Get('cierre-censo/preview')
+  previsualizarCierreCenso(@Query('municipio') municipio?: string) {
+    return this.recyclersService.previsualizarCierreCenso(
+      parseMunicipioCierre(municipio),
+    );
+  }
+
+  // ?simular=true devuelve el Excel del cierre sin subir ni aplicar nada.
+  @Post('cierre-censo')
+  async cerrarCenso(
+    @Body('municipio') municipio: string | undefined,
+    @Query('simular') simular: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const resultado = await this.recyclersService.cerrarCenso(
+      parseMunicipioCierre(municipio),
+      simular === 'true',
+    );
+    if (resultado.simulado) {
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${resultado.nombreArchivo}"`,
+      );
+      return new StreamableFile(resultado.buffer);
+    }
+    return {
+      url: resultado.url,
+      nombreArchivo: resultado.nombreArchivo,
+      resumen: resultado.resumen,
+      fecha: resultado.fecha,
+    };
   }
 
   // De solo lectura — no dispara ninguna regeneración. El frontend la usa

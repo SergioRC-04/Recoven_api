@@ -311,6 +311,23 @@ model UsuarioMicrorruta {
   @@map("usuarios_microrruta")
 }
 
+// Registro de cada cierre de censo (uno por ciudad, en fechas distintas):
+// qué se hizo y dónde quedó guardado el Excel con los censados antes y
+// después del cierre.
+model CierreCenso {
+  id               Int       @id @default(autoincrement())
+  municipio        Municipio
+  fechaCierre      DateTime  @default(now()) @map("fecha_cierre")
+  desvinculados    Int
+  nuevosARegulares Int       @map("nuevos_a_regulares")
+  censadosAntes    Int       @map("censados_antes")
+  censadosDespues  Int       @map("censados_despues")
+  nombreArchivo    String    @map("nombre_archivo")
+  urlArchivo       String    @map("url_archivo") @db.VarChar(500)
+
+  @@map("cierres_censo")
+}
+
 model RecyclerMicrorruta {
   recyclerId   Int        @map("recycler_id")
   microrrutaId Int        @map("microrruta_id")

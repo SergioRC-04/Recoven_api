@@ -120,6 +120,7 @@ interface RecyclerExportRow {
   id: number;
   cedula: string;
   nombreCompleto: string;
+  telefono?: string | null;
   censado: boolean;
   clasificacion: string;
   detalleUbicacion: string | null;
@@ -134,26 +135,27 @@ interface RecyclerExportRow {
   updatedAt: Date | string;
 }
 
-/**
- * Genera el Excel de recicladores. `desvinculados` es el único tipo que NO
- * lleva columna de Clasificación (no aplica al histórico) — el resto de
- * columnas y los colores de Censo/Rutas son iguales en todos los tipos.
- */
-export async function generarExcelRecyclers(
+interface OpcionesHoja {
+  incluyeClasificacion: boolean;
+  incluyeTelefono?: boolean;
+}
+
+// Escribe una hoja de recicladores (encabezados, filas y colores) — la
+// comparten el Excel normal de recicladores y el del cierre de censo.
+function escribirHojaRecyclers(
+  sheet: ExcelJS.Worksheet,
   recyclers: RecyclerExportRow[],
-  tipo: TipoExportRecyclers,
-): Promise<Buffer> {
-  const incluyeClasificacion = tipo !== 'desvinculados';
-
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('Recicladores');
-
+  { incluyeClasificacion, incluyeTelefono = false }: OpcionesHoja,
+): void {
   const columnas: Partial<ExcelJS.Column>[] = [
     { header: 'N°', key: 'numero', width: 6 },
     { header: 'Nombre Completo', key: 'nombreCompleto', width: 32 },
     { header: 'Cédula', key: 'cedula', width: 16 },
-    { header: 'Barrios', key: 'barrios', width: 30 },
   ];
+  if (incluyeTelefono) {
+    columnas.push({ header: 'Teléfono', key: 'telefono', width: 16 });
+  }
+  columnas.push({ header: 'Barrios', key: 'barrios', width: 30 });
   if (incluyeClasificacion) {
     columnas.push({ header: 'Clasificación', key: 'clasificacion', width: 16 });
   }
@@ -184,6 +186,7 @@ export async function generarExcelRecyclers(
       numero: index + 1,
       nombreCompleto: r.nombreCompleto,
       cedula: r.cedula,
+      telefono: r.telefono ?? '',
       // El detalle se agrega una sola vez, al final de la lista completa
       // de barrios — es un solo campo general por reciclador (no uno por
       // cada barrio), así que no tiene sentido repetirlo por barrio.
@@ -224,6 +227,60 @@ export async function generarExcelRecyclers(
             : COLOR_NEUTRAL; // A_QUITAR
       aplicarColor(row.getCell('clasificacion'), colorClasificacion);
     }
+  }
+}
+
+/**
+ * Genera el Excel de recicladores. `desvinculados` es el único tipo que NO
+ * lleva columna de Clasificación (no aplica al histórico) — el resto de
+ * columnas y los colores de Censo/Rutas son iguales en todos los tipos.
+ */
+export async function generarExcelRecyclers(
+  recyclers: RecyclerExportRow[],
+  tipo: TipoExportRecyclers,
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Recicladores');
+  escribirHojaRecyclers(sheet, recyclers, {
+    incluyeClasificacion: tipo !== 'desvinculados',
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
+/**
+ * Excel del cierre de censo: dos hojas con los recicladores censados ANTES
+ * y DESPUÉS del cierre (misma tabla que el Excel de "censados"), con una
+ * línea arriba indicando ciudad y fecha del cierre para llevar el registro.
+ */
+export async function generarExcelCierreCenso(params: {
+  antes: RecyclerExportRow[];
+  despues: RecyclerExportRow[];
+  fecha: Date;
+  ciudad: string;
+}): Promise<Buffer> {
+  const { antes, despues, fecha, ciudad } = params;
+  const workbook = new ExcelJS.Workbook();
+
+  const hojas: Array<[string, RecyclerExportRow[]]> = [
+    ['Censados antes del cierre', antes],
+    ['Censados después del cierre', despues],
+  ];
+  for (const [nombreHoja, filas] of hojas) {
+    const sheet = workbook.addWorksheet(nombreHoja);
+    escribirHojaRecyclers(sheet, filas, {
+      incluyeClasificacion: true,
+      incluyeTelefono: true,
+    });
+    // Se inserta después de escribir, así las keys de las columnas siguen
+    // apuntando a las celdas correctas de los datos.
+    sheet.spliceRows(1, 0, [
+      `Cierre de censo — ${ciudad} — ${formatearFecha(fecha)}`,
+    ]);
+    sheet.spliceRows(2, 0, []);
+    sheet.getRow(1).font = { bold: true, size: 13 };
+    sheet.getRow(3).font = { bold: true };
   }
 
   const buffer = await workbook.xlsx.writeBuffer();

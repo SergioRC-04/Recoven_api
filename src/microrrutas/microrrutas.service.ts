@@ -460,15 +460,45 @@ export class MicrorrutasService {
     return JSON.parse(rows[0].geojson) as GeoJsonFeatureCollection;
   }
 
+  // informe (opcional): "vigente" = solo rutas con al menos un reciclador
+  // activo censado; "nuevo" = solo rutas con al menos un reciclador activo
+  // NUEVO o REGULAR (no A_QUITAR). Sin él, todas las rutas, como siempre.
+  private async idsRutasDelInforme(
+    informe: 'vigente' | 'nuevo',
+  ): Promise<Set<number>> {
+    const filas =
+      informe === 'vigente'
+        ? await this.prisma.$queryRaw<Array<{ microrruta_id: number }>>`
+            SELECT DISTINCT rm.microrruta_id
+            FROM recycler_microrruta rm
+            JOIN recyclers r ON r.id = rm.recycler_id
+            WHERE r.deleted_at IS NULL
+              AND r."estadoVinculacion" = 'ACTIVO'::"EstadoVinculacion"
+              AND r.censado = true;
+          `
+        : await this.prisma.$queryRaw<Array<{ microrruta_id: number }>>`
+            SELECT DISTINCT rm.microrruta_id
+            FROM recycler_microrruta rm
+            JOIN recyclers r ON r.id = rm.recycler_id
+            WHERE r.deleted_at IS NULL
+              AND r."estadoVinculacion" = 'ACTIVO'::"EstadoVinculacion"
+              AND r.clasificacion IN ('NUEVO'::"ClasificacionRecycler", 'REGULAR'::"ClasificacionRecycler");
+          `;
+    return new Set(filas.map((f) => f.microrruta_id));
+  }
+
   async exportarExcel(params: {
     barrioCod?: string;
     localidadCod?: string;
     macrorrutaNumero?: string;
     municipio?: string;
+    informe?: 'vigente' | 'nuevo';
   }): Promise<Buffer> {
+    const { informe, ...filtros } = params;
     // Reutiliza la misma consulta de findAll (mismo filtro, mismo orden) para
     // que el Excel siempre coincida con lo que se ve en la tabla del admin.
-    const rutas = (await this.findAll(params)) as Array<{
+    const todas = (await this.findAll(filtros)) as Array<{
+      id: number;
       nombre: string;
       tipo: number;
       fecha_operacion: Date | string | null;
@@ -483,6 +513,13 @@ export class MicrorrutasService {
       estacion_transferencia: number | null;
       tipo_barrido: number | null;
     }>;
+
+    const idsDelInforme = informe
+      ? await this.idsRutasDelInforme(informe)
+      : null;
+    const rutas = idsDelInforme
+      ? todas.filter((r) => idsDelInforme.has(r.id))
+      : todas;
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Microrrutas');
@@ -562,20 +599,23 @@ export class MicrorrutasService {
             JOIN recyclers r ON r.id = rm.recycler_id
             WHERE rm.microrruta_id = ANY(${rutasIds})
               AND r.deleted_at IS NULL
-              AND r."estadoVinculacion" = 'ACTIVO'::"EstadoVinculacion";
+              AND r."estadoVinculacion" = 'ACTIVO'::"EstadoVinculacion"
+            ORDER BY r."nombreCompleto";
           `
         : [];
 
-    // Mismo criterio que trabajadorPorMicrorrutaId en AdminMicrorrutas.tsx:
-    // si por algún motivo hay más de un trabajador asignado a la misma
-    // ruta, se queda con el primero que aparezca, no con una lista de
-    // varios nombres.
-    const trabajadorPorId = new Map<number, string>();
+    // Una ruta compartida (p. ej. un reciclador a quitar y uno nuevo, durante
+    // el cambio de censo) muestra a todos sus trabajadores, separados por " / ".
+    const trabajadoresPorId = new Map<number, string[]>();
     for (const t of trabajadores) {
-      if (!trabajadorPorId.has(t.microrruta_id)) {
-        trabajadorPorId.set(t.microrruta_id, t.nombreCompleto);
-      }
+      trabajadoresPorId.set(t.microrruta_id, [
+        ...(trabajadoresPorId.get(t.microrruta_id) ?? []),
+        t.nombreCompleto,
+      ]);
     }
+    const trabajadorPorId = new Map(
+      [...trabajadoresPorId].map(([id, nombres]) => [id, nombres.join(' / ')]),
+    );
 
     // Mismo orden alfabético que ya usa MicrorrutasTable.tsx.
     const rutasOrdenadas = [...rutas].sort((a, b) =>
