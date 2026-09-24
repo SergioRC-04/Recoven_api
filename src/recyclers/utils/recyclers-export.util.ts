@@ -243,6 +243,7 @@ export async function generarExcelRecyclers(
   const sheet = workbook.addWorksheet('Recicladores');
   escribirHojaRecyclers(sheet, recyclers, {
     incluyeClasificacion: tipo !== 'desvinculados',
+    incluyeTelefono: true,
   });
 
   const buffer = await workbook.xlsx.writeBuffer();
