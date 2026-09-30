@@ -36,6 +36,25 @@ function parseMunicipioCierre(raw?: string): Municipio {
   );
 }
 
+// Para filtros opcionales (como exportar): a diferencia de
+// parseMunicipioCierre, aquí no venir informado es válido (= todas las
+// ciudades) y también se admite 'SIN_CIUDAD', igual que ya soporta
+// RecyclersService.findAll.
+function parseMunicipioFiltro(
+  raw?: string,
+): Municipio | 'SIN_CIUDAD' | undefined {
+  if (raw === Municipio.BARRANQUILLA || raw === Municipio.PUERTO_COLOMBIA) {
+    return raw;
+  }
+  if (raw === 'SIN_CIUDAD') return raw;
+  if (raw) {
+    throw new BadRequestException(
+      'municipio debe ser BARRANQUILLA, PUERTO_COLOMBIA o SIN_CIUDAD',
+    );
+  }
+  return undefined;
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller('/recyclers')
 export class RecyclersController {
@@ -111,10 +130,12 @@ export class RecyclersController {
   @Get('exportar')
   async exportar(
     @Query('tipo') tipoRaw: string | undefined,
+    @Query('municipio') municipioRaw: string | undefined,
     @Res() res: Response,
   ) {
     const tipo = parseTipoExportRecyclers(tipoRaw);
-    const filtros = mapearTipoAFiltrosFindAll(tipo);
+    const municipio = parseMunicipioFiltro(municipioRaw);
+    const filtros = { ...mapearTipoAFiltrosFindAll(tipo), municipio };
     const recyclers = await this.recyclersService.findAll(filtros);
     const buffer = await generarExcelRecyclers(recyclers, tipo);
 
