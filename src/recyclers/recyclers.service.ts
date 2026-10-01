@@ -17,6 +17,7 @@ import {
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { generarCertificadoGeneralPdf } from './utils/recycler-certificado.util';
 import { generarExcelCierreCenso } from './utils/recyclers-export.util';
+import { sincronizarBarrioReciclador } from './utils/recycler-barrios-sync.util';
 import { streamToBuffer } from '../common/utils/stream-to-buffer.util';
 import { waitUntil } from '@vercel/functions';
 
@@ -225,23 +226,32 @@ export class RecyclersService {
     );
 
     try {
-      const nuevo = await this.prisma.recycler.create({
-        data: {
-          ...data,
-          fechaIngreso: data.fechaIngreso
-            ? new Date(data.fechaIngreso)
-            : new Date('2025-01-01'),
-          barrios: barriosIds
-            ? {
-                create: barriosIds.map((bId) => ({ barrioId: bId })),
-              }
-            : undefined,
-          microrrutas: microrrutasIds
-            ? {
-                create: microrrutasIds.map((mId) => ({ microrrutaId: mId })),
-              }
-            : undefined,
-        },
+      const nuevo = await this.prisma.$transaction(async (tx) => {
+        const creado = await tx.recycler.create({
+          data: {
+            ...data,
+            fechaIngreso: data.fechaIngreso
+              ? new Date(data.fechaIngreso)
+              : new Date('2025-01-01'),
+            // El barrio NO se guarda aquí si hay microrrutas: se deriva
+            // justo debajo (sincronizarBarrioReciclador) a partir de
+            // ellas, ignorando lo que haya venido en barriosIds.
+            microrrutas: microrrutasIds
+              ? {
+                  create: microrrutasIds.map((mId) => ({ microrrutaId: mId })),
+                }
+              : undefined,
+          },
+        });
+
+        await sincronizarBarrioReciclador(
+          tx,
+          creado.id,
+          microrrutasIds ?? [],
+          barriosIds,
+        );
+
+        return creado;
       });
 
       this.dispararRegeneracionReporteCertificados();
@@ -278,19 +288,13 @@ export class RecyclersService {
 
     try {
       const actualizado = await this.prisma.$transaction(async (tx) => {
-        if (barriosIds !== undefined) {
-          await tx.recyclerBarrio.deleteMany({ where: { recyclerId: id } });
-          if (barriosIds.length > 0) {
-            await tx.recyclerBarrio.createMany({
-              data: barriosIds.map((bId) => ({
-                recyclerId: id,
-                barrioId: bId,
-              })),
-            });
-          }
-        }
-
         let rutasAfectadas: number[] = [];
+        // Lista final de microrrutas del reciclador tras este guardado —
+        // la necesita sincronizarBarrioReciclador de abajo para saber si
+        // tiene ruta(s) o no, sin importar si este update tocó o no el
+        // campo de microrrutas.
+        let microrrutaIdsFinal: number[] | undefined;
+
         if (microrrutasIds !== undefined) {
           const previas = await tx.recyclerMicrorruta.findMany({
             where: { recyclerId: id },
@@ -311,6 +315,24 @@ export class RecyclersService {
               })),
             });
           }
+          microrrutaIdsFinal = microrrutasIds;
+        } else if (barriosIds !== undefined) {
+          // Solo se tocó el barrio: hace falta saber si ya tiene ruta(s)
+          // para decidir si ese barrio manual aplica o se ignora.
+          const actuales = await tx.recyclerMicrorruta.findMany({
+            where: { recyclerId: id },
+            select: { microrrutaId: true },
+          });
+          microrrutaIdsFinal = actuales.map((r) => r.microrrutaId);
+        }
+
+        if (microrrutaIdsFinal !== undefined) {
+          await sincronizarBarrioReciclador(
+            tx,
+            id,
+            microrrutaIdsFinal,
+            barriosIds,
+          );
         }
 
         const r = await tx.recycler.update({
@@ -669,6 +691,20 @@ export class RecyclersService {
           data: { recyclerId, microrrutaId },
         });
         await this.sincronizarEstadoMicrorrutas(tx, [microrrutaId]);
+
+        // Este endpoint solo agrega una ruta (nunca deja al reciclador
+        // sin ninguna), así que siempre deriva el barrio de su lista
+        // completa de rutas tras el agregado.
+        const rutas = await tx.recyclerMicrorruta.findMany({
+          where: { recyclerId },
+          select: { microrrutaId: true },
+        });
+        await sincronizarBarrioReciclador(
+          tx,
+          recyclerId,
+          rutas.map((r) => r.microrrutaId),
+          undefined,
+        );
       });
     }
 

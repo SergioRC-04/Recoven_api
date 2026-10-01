@@ -33,6 +33,7 @@
 
 import type { PrismaClient } from '@prisma/client';
 import { Prisma } from '@prisma/client';
+import { sincronizarBarriosRecicladoresDeMicrorruta } from '../../recyclers/utils/recycler-barrios-sync.util';
 
 // Profundidad de la erosión, en metros (negativo: encoge el polígono hacia
 // adentro). ~8m se acerca al ancho de una calle residencial en
@@ -199,4 +200,12 @@ export async function calcularYGuardarBarriosMicrorruta(
     where: { id: microrrutaId },
     data: { macrorrutaId },
   });
+
+  // El barrio de un reciclador con ruta se deriva del de su(s)
+  // microrruta(s) — si el recálculo de arriba cambió de barrio, se
+  // propaga aquí mismo a quien la tenga asignada (ver
+  // recycler-barrios-sync.util.ts). Único punto de recálculo de barrios
+  // de una ruta, así que cubre sin más cambios create(), updateGeom() y
+  // el script de respaldo.
+  await sincronizarBarriosRecicladoresDeMicrorruta(prisma, microrrutaId);
 }
