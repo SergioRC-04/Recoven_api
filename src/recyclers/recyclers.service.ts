@@ -18,6 +18,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { generarCertificadoGeneralPdf } from './utils/recycler-certificado.util';
 import { generarExcelCierreCenso } from './utils/recyclers-export.util';
 import { sincronizarBarrioReciclador } from './utils/recycler-barrios-sync.util';
+import { sincronizarFechaOperacionMicrorrutas } from './utils/microrruta-fecha-sync.util';
 import { streamToBuffer } from '../common/utils/stream-to-buffer.util';
 import { waitUntil } from '@vercel/functions';
 
@@ -250,6 +251,9 @@ export class RecyclersService {
           microrrutasIds ?? [],
           barriosIds,
         );
+        if (microrrutasIds && microrrutasIds.length > 0) {
+          await sincronizarFechaOperacionMicrorrutas(tx, microrrutasIds);
+        }
 
         return creado;
       });
@@ -333,6 +337,14 @@ export class RecyclersService {
             microrrutaIdsFinal,
             barriosIds,
           );
+        }
+        // rutasAfectadas es la unión de las rutas que tenía antes y las
+        // que le quedan — así se recalculan tanto las nuevas (ganaron un
+        // reciclador) como las que dejó (si les queda otro reciclador, su
+        // fecha se recalcula con el que quede; si se quedan sin ninguno,
+        // sincronizarFechaOperacionMicrorrutas no les toca nada).
+        if (rutasAfectadas.length > 0) {
+          await sincronizarFechaOperacionMicrorrutas(tx, rutasAfectadas);
         }
 
         const r = await tx.recycler.update({
@@ -705,6 +717,7 @@ export class RecyclersService {
           rutas.map((r) => r.microrrutaId),
           undefined,
         );
+        await sincronizarFechaOperacionMicrorrutas(tx, [microrrutaId]);
       });
     }
 
