@@ -8,6 +8,36 @@ import { GeoJsonFeatureCollection } from 'src/geo-territorio/dto/geo-territorio.
 import { calcularYGuardarBarriosMicrorruta } from './utils/microrrutas-barrios.util';
 import { calcularYGuardarGuiaCallesMicrorruta } from './utils/microrrutas-vias.util';
 
+// Mensaje exacto que el frontend matchea para distinguir este caso (nombre
+// ya tomado por otra microrruta) de cualquier otro error al guardar — ver
+// MicrorrutaFormModal.tsx.
+export const MENSAJE_NOMBRE_DUPLICADO =
+  'Ya existe una microrruta con ese nombre.';
+
+// Detecta una violación del índice único microrrutas_nombre_key, sin
+// importar por qué camino de Prisma llegó el error:
+// - create() usa $queryRaw crudo: Prisma envuelve el error real de
+//   Postgres (P2010) con el código/mensaje de Postgres en error.meta
+//   (code '23505', message con el nombre del índice).
+// - update() usa la API de modelo (prisma.microrruta.update): Prisma
+//   lanza directamente P2002 con el/los campos en meta.target.
+function esViolacionNombreDuplicado(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+
+  if (error.code === 'P2002') {
+    const target = error.meta?.target;
+    if (typeof target === 'string') return target.includes('nombre');
+    if (Array.isArray(target)) return target.includes('nombre');
+  }
+
+  const meta = error.meta as { code?: string; message?: string } | undefined;
+  if (meta?.code === '23505' && typeof meta.message === 'string') {
+    return meta.message.includes('microrrutas_nombre_key');
+  }
+
+  return false;
+}
+
 function formatearFechaDDMMYYYY(fecha: Date | string): string {
   // fecha_operacion se guarda como medianoche UTC del día elegido —
   // getUTC*() en vez de get*() evita que se corra un día en cualquier
@@ -290,6 +320,9 @@ export class MicrorrutasService {
       return result[0];
     } catch (error) {
       console.error('Error detallado:', error);
+      if (esViolacionNombreDuplicado(error)) {
+        throw new BadRequestException(MENSAJE_NOMBRE_DUPLICADO);
+      }
       throw new BadRequestException(
         'Formato de GeoJSON inválido o error en la inserción',
       );
@@ -382,13 +415,20 @@ export class MicrorrutasService {
     }
 
     // Actualizamos el resto de atributos del SUI en Prisma
-    return this.prisma.microrruta.update({
-      where: { id },
-      data: {
-        ...data,
-        ...(fechaOperacion && { fechaOperacion: new Date(fechaOperacion) }),
-      },
-    });
+    try {
+      return await this.prisma.microrruta.update({
+        where: { id },
+        data: {
+          ...data,
+          ...(fechaOperacion && { fechaOperacion: new Date(fechaOperacion) }),
+        },
+      });
+    } catch (error) {
+      if (esViolacionNombreDuplicado(error)) {
+        throw new BadRequestException(MENSAJE_NOMBRE_DUPLICADO);
+      }
+      throw error;
+    }
   }
 
   // Lista de macrorrutas para el filtro del admin — solo las que de
