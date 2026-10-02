@@ -187,6 +187,23 @@ model Vias {
   @@map("vias")
 }
 
+// Direcciones puntuales (una por predio/entrada), usadas para calcular la
+// dirección inicial y final de una microrruta (la más cercana a cada
+// extremo de su trazo — ver microrrutas-direcciones.util.ts) y, a futuro,
+// para exportar las direcciones por las que pasa una ruta. globalId es el
+// GlobalID de ArcGIS de la capa fuente — único, permite reimportar el
+// GeoJSON sin duplicar filas.
+model Direcciones {
+  id           String                                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  globalId     String                                @unique @map("global_id") @db.VarChar(50)
+  direccion    String                                @db.VarChar(150)
+  sectorCiudad String?                                @map("sector_ciudad") @db.VarChar(150)
+  geom         Unsupported("geometry(Point, 9377)")?
+
+  @@index([geom], type: Gist, map: "direcciones_geom_idx")
+  @@map("direcciones")
+}
+
 enum EstadoVinculacion {
   ACTIVO
   INACTIVO

@@ -7,6 +7,10 @@ import * as ExcelJS from 'exceljs';
 import { GeoJsonFeatureCollection } from 'src/geo-territorio/dto/geo-territorio.dto';
 import { calcularYGuardarBarriosMicrorruta } from './utils/microrrutas-barrios.util';
 import { calcularYGuardarGuiaCallesMicrorruta } from './utils/microrrutas-vias.util';
+import {
+  calcularYGuardarDireccionesMicrorruta,
+  obtenerExtremosMicrorruta,
+} from './utils/microrrutas-direcciones.util';
 
 // Mensaje exacto que el frontend matchea para distinguir este caso (nombre
 // ya tomado por otra microrruta) de cualquier otro error al guardar — ver
@@ -315,6 +319,7 @@ export class MicrorrutasService {
       if (geojsonStr) {
         await calcularYGuardarBarriosMicrorruta(this.prisma, nuevaId);
         await calcularYGuardarGuiaCallesMicrorruta(this.prisma, nuevaId);
+        await calcularYGuardarDireccionesMicrorruta(this.prisma, nuevaId);
       }
 
       return result[0];
@@ -355,8 +360,14 @@ export class MicrorrutasService {
     const geometryObj = this.extractGeometry(geojson);
     const geojsonStr = JSON.stringify(geometryObj);
 
+    // Snapshot de los extremos del trazo ANTES de sobrescribir geom — lo
+    // necesita calcularYGuardarDireccionesMicrorruta para decidir si cada
+    // extremo de verdad se movió (y por tanto toca recalcular esa
+    // dirección) o se conserva tal cual (manual o calculada).
+    const extremosAntes = await obtenerExtremosMicrorruta(this.prisma, id);
+
     await this.prisma.$executeRaw`
-      UPDATE microrrutas 
+      UPDATE microrrutas
       SET geom = ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON(${geojsonStr}), 4326), 9377),
           updated_at = NOW()
       WHERE id = ${id};
@@ -396,6 +407,7 @@ export class MicrorrutasService {
 
     await calcularYGuardarBarriosMicrorruta(this.prisma, id);
     await calcularYGuardarGuiaCallesMicrorruta(this.prisma, id);
+    await calcularYGuardarDireccionesMicrorruta(this.prisma, id, extremosAntes);
 
     return { success: true };
   }
