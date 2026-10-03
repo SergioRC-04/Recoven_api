@@ -69,9 +69,12 @@ export class RecyclersService {
   async findAll(filters: {
     desvinculados?: boolean;
     rutas?: 'con_ruta' | 'sin_ruta';
-    clasificacion?: ClasificacionRecycler;
+    // Array: el admin puede marcar varias clasificaciones/barrios a la
+    // vez (p. ej. Nuevo + Regular) — ver AdminRecyclers.tsx. Vacío o
+    // undefined, igual que antes, significa "sin filtrar por esto".
+    clasificacion?: ClasificacionRecycler[];
     censado?: boolean;
-    barrioId?: string;
+    barrioId?: string[];
     municipio?: Municipio | 'SIN_CIUDAD';
     search?: string;
   }) {
@@ -104,16 +107,16 @@ export class RecyclersService {
     if (rutas === 'con_ruta') andConditions.push({ microrrutas: { some: {} } });
     if (rutas === 'sin_ruta') andConditions.push({ microrrutas: { none: {} } });
 
-    if (clasificacion) {
-      andConditions.push({ clasificacion });
+    if (clasificacion && clasificacion.length > 0) {
+      andConditions.push({ clasificacion: { in: clasificacion } });
     }
 
     if (censado !== undefined) {
       andConditions.push({ censado });
     }
 
-    if (barrioId) {
-      andConditions.push({ barrios: { some: { barrioId } } });
+    if (barrioId && barrioId.length > 0) {
+      andConditions.push({ barrios: { some: { barrioId: { in: barrioId } } } });
     }
 
     // "SIN_CIUDAD" no es un valor del enum Municipio: son los recicladores

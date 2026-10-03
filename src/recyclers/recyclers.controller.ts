@@ -55,6 +55,14 @@ function parseMunicipioFiltro(
   return undefined;
 }
 
+// Un valor repetido en el querystring (?x=a&x=b) llega ya como array;
+// uno solo (?x=a) llega como string suelto — esto lo deja siempre en
+// array, o undefined si no vino nada.
+function normalizarAArray<T>(valor: T | T[] | undefined): T[] | undefined {
+  if (valor === undefined) return undefined;
+  return Array.isArray(valor) ? valor : [valor];
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller('/recyclers')
 export class RecyclersController {
@@ -63,13 +71,20 @@ export class RecyclersController {
   // Las cinco dimensiones de filtro son independientes y se combinan
   // entre sí (a diferencia de la antigua pestaña única y excluyente) —
   // se puede filtrar por ruta, censo, clasificación y barrio a la vez.
+  //
+  // clasificación y barrio admiten varios valores a la vez (p. ej. Nuevo
+  // + Regular) — si el front manda la misma clave repetida
+  // (?clasificacion=NUEVO&clasificacion=REGULAR), Express ya los junta en
+  // un array; si manda uno solo, llega como string suelto, de ahí el
+  // normalizarAArray.
   @Get()
   findAll(
     @Query('desvinculados') desvinculadosRaw?: string,
     @Query('rutas') rutas?: 'con_ruta' | 'sin_ruta',
-    @Query('clasificacion') clasificacion?: ClasificacionRecycler,
+    @Query('clasificacion')
+    clasificacionRaw?: ClasificacionRecycler | ClasificacionRecycler[],
     @Query('censado') censadoRaw?: string,
-    @Query('barrioId') barrioId?: string,
+    @Query('barrioId') barrioIdRaw?: string | string[],
     @Query('municipio') municipio?: Municipio | 'SIN_CIUDAD',
     @Query('search') search?: string,
   ) {
@@ -79,9 +94,9 @@ export class RecyclersController {
     return this.recyclersService.findAll({
       desvinculados,
       rutas,
-      clasificacion,
+      clasificacion: normalizarAArray(clasificacionRaw),
       censado,
-      barrioId,
+      barrioId: normalizarAArray(barrioIdRaw),
       municipio,
       search,
     });
