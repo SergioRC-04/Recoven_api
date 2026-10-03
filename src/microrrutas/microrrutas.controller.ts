@@ -32,6 +32,12 @@ function parseEstadoFiltro(
     : undefined;
 }
 
+// Igual criterio: cualquier cosa distinta de A_PIE/CAMION cae a undefined
+// (sin filtrar por esto) en vez de llegar cruda a la consulta.
+function parseModalidadFiltro(raw?: string): 'A_PIE' | 'CAMION' | undefined {
+  return raw === 'A_PIE' || raw === 'CAMION' ? raw : undefined;
+}
+
 @Controller('/microrrutas')
 export class MicrorrutasController {
   constructor(private readonly microrrutasService: MicrorrutasService) {}
@@ -43,6 +49,7 @@ export class MicrorrutasController {
     @Query('macrorrutaNumero') macrorrutaNumero?: string,
     @Query('municipio') municipio?: string,
     @Query('estado') estado?: string,
+    @Query('modalidad') modalidad?: string,
   ) {
     return this.microrrutasService.findAll({
       barrioCod,
@@ -50,6 +57,7 @@ export class MicrorrutasController {
       macrorrutaNumero,
       municipio,
       estado: parseEstadoFiltro(estado),
+      modalidad: parseModalidadFiltro(modalidad),
     });
   }
 
@@ -117,6 +125,7 @@ export class MicrorrutasController {
     @Query('macrorrutaNumero') macrorrutaNumero: string | undefined,
     @Query('municipio') municipio: string | undefined,
     @Query('informe') informe: string | undefined,
+    @Query('modalidad') modalidad: string | undefined,
     @Res() res: Response,
   ) {
     const buffer = await this.microrrutasService.exportarExcel({
@@ -124,6 +133,7 @@ export class MicrorrutasController {
       localidadCod,
       macrorrutaNumero,
       municipio,
+      modalidad: parseModalidadFiltro(modalidad),
       informe:
         informe === 'vigente' || informe === 'nuevo' ? informe : undefined,
     });
@@ -148,6 +158,7 @@ export class MicrorrutasController {
     @Query('localidadCod') localidadCod: string | undefined,
     @Query('macrorrutaNumero') macrorrutaNumero: string | undefined,
     @Query('municipio') municipio: string | undefined,
+    @Query('modalidad') modalidad: string | undefined,
     @Res() res: Response,
   ) {
     const buffer = await this.microrrutasService.exportarTablaExcel({
@@ -155,6 +166,7 @@ export class MicrorrutasController {
       localidadCod,
       macrorrutaNumero,
       municipio,
+      modalidad: parseModalidadFiltro(modalidad),
     });
     res.setHeader(
       'Content-Type',
@@ -175,6 +187,7 @@ export class MicrorrutasController {
     @Query('macrorrutaNumero') macrorrutaNumero: string | undefined,
     @Query('municipio') municipio: string | undefined,
     @Query('formato') formato: string | undefined,
+    @Query('modalidad') modalidad: string | undefined,
     @Res() res: Response,
   ) {
     const geojson = await this.microrrutasService.exportarCapaGeoJson({
@@ -182,6 +195,7 @@ export class MicrorrutasController {
       localidadCod,
       macrorrutaNumero,
       municipio,
+      modalidad: parseModalidadFiltro(modalidad),
     });
     await responderExportGeo(
       res,

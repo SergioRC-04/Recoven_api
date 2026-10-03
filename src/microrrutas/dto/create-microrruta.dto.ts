@@ -1,5 +1,6 @@
 // dto/create-microrruta.dto.ts
-import { IsString, IsNumber, IsOptional } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsEnum } from 'class-validator';
+import { ModalidadMicrorruta } from '@prisma/client';
 
 export class CreateMicrorrutaDto {
   @IsString()
@@ -7,6 +8,14 @@ export class CreateMicrorrutaDto {
 
   @IsNumber()
   tipo: number;
+
+  // Independiente de `tipo` (catálogo de actividad del SUI) — a pie o en
+  // camión. Opcional: si no viene, cae al default de la BD (A_PIE), pero
+  // el frontend siempre la manda (la decide la pestaña activa, no un
+  // campo del formulario).
+  @IsOptional()
+  @IsEnum(ModalidadMicrorruta)
+  modalidad?: ModalidadMicrorruta;
 
   @IsOptional()
   @IsString()

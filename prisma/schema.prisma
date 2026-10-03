@@ -197,7 +197,7 @@ model Direcciones {
   id           String                                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   globalId     String                                @unique @map("global_id") @db.VarChar(50)
   direccion    String                                @db.VarChar(150)
-  sectorCiudad String?                                @map("sector_ciudad") @db.VarChar(150)
+  sectorCiudad String?                               @map("sector_ciudad") @db.VarChar(150)
   geom         Unsupported("geometry(Point, 9377)")?
 
   @@index([geom], type: Gist, map: "direcciones_geom_idx")
@@ -223,6 +223,11 @@ enum ClasificacionRecycler {
 enum EstadoMicrorruta {
   ACTIVA
   INACTIVA
+}
+
+enum ModalidadMicrorruta {
+  A_PIE
+  CAMION
 }
 
 enum TipoDocumento {
@@ -259,21 +264,26 @@ model Recycler {
 }
 
 model Microrruta {
-  id                    Int              @id @default(autoincrement())
-  nombre                String           @unique
+  id                    Int                 @id @default(autoincrement())
+  nombre                String              @unique
   tipo                  Int // 1 a 8 según SUI
-  fechaOperacion        DateTime?        @map("fecha_operacion")
-  dirInicio             String?          @map("dir_inicio")
-  horaInicio            String?          @map("hora_inicio")
-  dirFin                String?          @map("dir_fin")
-  horaFin               String?          @map("hora_fin")
-  distPavimentada       Float?           @default(0) @map("dist_pavimentada")
-  distNoPavimentada     Float?           @default(0) @map("dist_no_pavimentada")
+  fechaOperacion        DateTime?           @map("fecha_operacion")
+  dirInicio             String?             @map("dir_inicio")
+  horaInicio            String?             @map("hora_inicio")
+  dirFin                String?             @map("dir_fin")
+  horaFin               String?             @map("hora_fin")
+  distPavimentada       Float?              @default(0) @map("dist_pavimentada")
+  distNoPavimentada     Float?              @default(0) @map("dist_no_pavimentada")
   frecuencia            Int?
-  diasFrecuencia        String?          @map("dias_frecuencia")
-  estacionTransferencia Int?             @map("estacion_transferencia")
-  tipoBarrido           Int?             @map("tipo_barrido")
-  estado                EstadoMicrorruta @default(ACTIVA)
+  diasFrecuencia        String?             @map("dias_frecuencia")
+  estacionTransferencia Int?                @map("estacion_transferencia")
+  tipoBarrido           Int?                @map("tipo_barrido")
+  estado                EstadoMicrorruta    @default(ACTIVA)
+  // Independiente de `tipo` (el catálogo de actividad del SUI, que no se
+  // toca): cualquiera de esos 8 tipos puede hacerse a pie o en camión.
+  // Default A_PIE para que las rutas ya existentes queden clasificadas
+  // correctamente sin backfill.
+  modalidad             ModalidadMicrorruta @default(A_PIE)
 
   // Referencia directa a la macrorruta de esta ruta — NO un campo de
   // localidad propio: Macrorruta ya trae su localidad adentro

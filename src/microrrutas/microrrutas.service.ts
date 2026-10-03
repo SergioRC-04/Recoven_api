@@ -159,6 +159,7 @@ export class MicrorrutasService {
     macrorrutaNumero?: string;
     municipio?: string;
     estado?: 'ACTIVA' | 'INACTIVA' | 'TODAS';
+    modalidad?: 'A_PIE' | 'CAMION';
   }): { joinClause: Prisma.Sql; whereClause: Prisma.Sql } {
     const whereConditions: Prisma.Sql[] = [];
 
@@ -166,6 +167,12 @@ export class MicrorrutasService {
     if (estado !== 'TODAS') {
       whereConditions.push(
         Prisma.sql`m.estado = ${estado}::"EstadoMicrorruta"`,
+      );
+    }
+
+    if (params.modalidad) {
+      whereConditions.push(
+        Prisma.sql`m.modalidad = ${params.modalidad}::"ModalidadMicrorruta"`,
       );
     }
 
@@ -239,6 +246,7 @@ export class MicrorrutasService {
     macrorrutaNumero?: string;
     municipio?: string;
     estado?: 'ACTIVA' | 'INACTIVA' | 'TODAS';
+    modalidad?: 'A_PIE' | 'CAMION';
   }) {
     const { joinClause, whereClause } = this.construirFiltroEspacial(params);
 
@@ -248,6 +256,7 @@ export class MicrorrutasService {
       m.dir_fin, m.hora_fin, m.dist_pavimentada, m.dist_no_pavimentada,
       m.frecuencia, m.dias_frecuencia, m.estacion_transferencia, m.tipo_barrido,
       m.estado,
+      m.modalidad,
       m.guia_calles,
       mac.numero AS macrorruta_numero,
       ld.nombre AS localidad_dominante_nombre,
@@ -291,23 +300,24 @@ export class MicrorrutasService {
       INSERT INTO microrrutas (
         nombre, tipo, fecha_operacion, dir_inicio, hora_inicio, dir_fin, hora_fin,
         dist_pavimentada, dist_no_pavimentada, frecuencia, dias_frecuencia,
-        estacion_transferencia, tipo_barrido, estado, geom, created_at, updated_at
+        estacion_transferencia, tipo_barrido, estado, modalidad, geom, created_at, updated_at
       )
       VALUES (
-        ${dto.nombre}, 
-        ${dto.tipo}, 
+        ${dto.nombre},
+        ${dto.tipo},
         ${dto.fechaOperacion ? new Date(dto.fechaOperacion) : null},
-        ${dto.dirInicio ?? null}, 
-        ${dto.horaInicio ?? null}, 
-        ${dto.dirFin ?? null}, 
+        ${dto.dirInicio ?? null},
+        ${dto.horaInicio ?? null},
+        ${dto.dirFin ?? null},
         ${dto.horaFin ?? null},
-        ${dto.distPavimentada ?? 0}, 
-        ${dto.distNoPavimentada ?? 0}, 
+        ${dto.distPavimentada ?? 0},
+        ${dto.distNoPavimentada ?? 0},
         ${dto.frecuencia ?? null},
-        ${dto.diasFrecuencia ?? null}, 
-        ${dto.estacionTransferencia ?? null}, 
+        ${dto.diasFrecuencia ?? null},
+        ${dto.estacionTransferencia ?? null},
         ${dto.tipoBarrido ?? null},
         'ACTIVA'::"EstadoMicrorruta",
+        ${dto.modalidad ?? 'A_PIE'}::"ModalidadMicrorruta",
         ${geomSql},
         NOW(),
         NOW()
@@ -544,6 +554,7 @@ export class MicrorrutasService {
     localidadCod?: string;
     macrorrutaNumero?: string;
     municipio?: string;
+    modalidad?: 'A_PIE' | 'CAMION';
     informe?: 'vigente' | 'nuevo';
   }): Promise<Buffer> {
     const { informe, ...filtros } = params;
@@ -630,6 +641,7 @@ export class MicrorrutasService {
     localidadCod?: string;
     macrorrutaNumero?: string;
     municipio?: string;
+    modalidad?: 'A_PIE' | 'CAMION';
   }): Promise<Buffer> {
     const rutas = (await this.findAll(params)) as Array<{
       id: number;
@@ -716,6 +728,7 @@ export class MicrorrutasService {
     localidadCod?: string;
     macrorrutaNumero?: string;
     municipio?: string;
+    modalidad?: 'A_PIE' | 'CAMION';
   }) {
     const { joinClause, whereClause } = this.construirFiltroEspacial(params);
 
@@ -741,7 +754,8 @@ export class MicrorrutasService {
             'diasFrecuencia', sub.dias_frecuencia,
             'estacionTransferencia', sub.estacion_transferencia,
             'tipoBarrido', sub.tipo_barrido,
-            'estado', sub.estado
+            'estado', sub.estado,
+            'modalidad', sub.modalidad
           ),
           'geometry', ST_AsGeoJSON(sub.geom)::json
         )
@@ -752,7 +766,7 @@ export class MicrorrutasService {
         m.id, m.nombre, m.tipo, m.fecha_operacion, m.dir_inicio, m.hora_inicio,
         m.dir_fin, m.hora_fin, m.dist_pavimentada, m.dist_no_pavimentada,
         m.frecuencia, m.dias_frecuencia, m.estacion_transferencia, m.tipo_barrido,
-        m.estado, m.geom
+        m.estado, m.modalidad, m.geom
       FROM microrrutas m
       ${joinClause}
       ${whereClause}
