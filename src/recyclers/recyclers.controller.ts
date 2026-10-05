@@ -25,7 +25,6 @@ import {
   parseTipoExportRecyclers,
   mapearTipoAFiltrosFindAll,
 } from './utils/recyclers-export.util';
-import { generarCertificadoPdf } from './utils/recycler-certificado.util';
 
 function parseMunicipioCierre(raw?: string): Municipio {
   if (raw === Municipio.BARRANQUILLA || raw === Municipio.PUERTO_COLOMBIA) {
@@ -142,6 +141,24 @@ export class RecyclersController {
     return this.recyclersService.asignarMicrorruta(id, microrrutaId);
   }
 
+  // Genera la Solicitud de Inclusión (PDF) al vuelo — no hay nada
+  // guardado de antemano, se arma en cada request con los datos actuales
+  // del reciclador.
+  @Get(':id/afiliacion')
+  async descargarAfiliacion(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() res: Response,
+  ) {
+    const { buffer, cedula } =
+      await this.recyclersService.generarDocumentoAfiliacion(id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="afiliacion-${cedula}.pdf"`,
+    );
+    res.send(buffer);
+  }
+
   @Get('exportar')
   async exportar(
     @Query('tipo') tipoRaw: string | undefined,
@@ -202,37 +219,5 @@ export class RecyclersController {
       resumen: resultado.resumen,
       fecha: resultado.fecha,
     };
-  }
-
-  // De solo lectura — no dispara ninguna regeneración. El frontend la usa
-  // para saber la URL vigente al cargar la página, y para sondear
-  // (polling) después de crear/editar un reciclador hasta que
-  // actualizando pase a false.
-  @Get('certificados-estado')
-  async certificadosEstado() {
-    return this.recyclersService.obtenerEstadoReporteCertificados();
-  }
-
-  @Get(':id/certificado')
-  async descargarCertificado(
-    @Param('id', ParseIntPipe) id: number,
-    @Res() res: Response,
-  ) {
-    const recycler = await this.recyclersService.findOne(id);
-    const doc = generarCertificadoPdf({
-      nombreCompleto: recycler.nombreCompleto,
-      tipoDocumento: recycler.tipoDocumento,
-      cedula: recycler.cedula,
-      barrios: recycler.barrios,
-      fechaVinculacion: recycler.fechaIngreso,
-    });
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="certificado-${recycler.cedula}.pdf"`,
-    );
-    doc.pipe(res);
-    doc.end();
   }
 }

@@ -15,33 +15,18 @@ import {
   Prisma,
 } from '@prisma/client';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { generarCertificadoGeneralPdf } from './utils/recycler-certificado.util';
 import { generarExcelCierreCenso } from './utils/recyclers-export.util';
 import { sincronizarBarrioReciclador } from './utils/recycler-barrios-sync.util';
 import { sincronizarFechaOperacionMicrorrutas } from './utils/microrruta-fecha-sync.util';
+import {
+  generarDocumentoAfiliacionPdf,
+  type DatosAfiliacion,
+} from './utils/recycler-afiliacion.util';
 import { streamToBuffer } from '../common/utils/stream-to-buffer.util';
-import { waitUntil } from '@vercel/functions';
-
-export interface EstadoReporteCertificados {
-  actualizando: boolean;
-  url: string | null;
-}
 
 @Injectable()
 export class RecyclersService {
   private supabase: SupabaseClient;
-
-  // Ya no es una sola ruta fija — cada regeneración sube un archivo con
-  // nombre NUEVO (prefijo + timestamp) y borra los anteriores. Esto es lo
-  // que de raíz evita el problema de caché: una URL que nunca se pidió
-  // antes no puede estar cacheada por el navegador ni por la CDN, a
-  // diferencia de sobrescribir siempre el mismo path.
-  private readonly REPORTE_CARPETA = 'reportes';
-  private readonly REPORTE_PREFIJO = 'certificados-recicladores-';
-  // Mientras este archivo exista, hay una regeneración en curso — el
-  // frontend lo consulta (indirectamente, vía obtenerEstadoReporteCertificados)
-  // para saber cuándo dejar de mostrar "Actualizando certificados...".
-  private readonly REPORTE_MARCADOR_PATH = 'reportes/.regenerando';
 
   constructor(private prisma: PrismaService) {
     const url = process.env.SUPABASE_URL;
@@ -261,8 +246,6 @@ export class RecyclersService {
         return creado;
       });
 
-      this.dispararRegeneracionReporteCertificados();
-
       return nuevo;
     } catch (error) {
       // P2002 = violación de restricción única. cedula es la única
@@ -362,8 +345,6 @@ export class RecyclersService {
         await this.sincronizarEstadoMicrorrutas(tx, rutasAfectadas);
         return r;
       });
-
-      this.dispararRegeneracionReporteCertificados();
 
       return actualizado;
     } catch (error) {
@@ -549,7 +530,6 @@ export class RecyclersService {
       throw error;
     }
 
-    this.dispararRegeneracionReporteCertificados();
     return { simulado: false as const, url, nombreArchivo, resumen, fecha };
   }
 
@@ -562,8 +542,6 @@ export class RecyclersService {
       where: { id },
       data: { censado: !recycler.censado },
     });
-
-    this.dispararRegeneracionReporteCertificados();
 
     return actualizado;
   }
@@ -639,10 +617,6 @@ export class RecyclersService {
       return r;
     });
 
-    // Un reciclador desvinculado ya no debe aparecer en el certificado
-    // general — regenerar aquí también, no solo en create/update.
-    this.dispararRegeneracionReporteCertificados();
-
     return actualizado;
   }
 
@@ -669,8 +643,6 @@ export class RecyclersService {
       );
       return r;
     });
-
-    this.dispararRegeneracionReporteCertificados();
 
     return actualizado;
   }
@@ -760,150 +732,59 @@ export class RecyclersService {
   }
 
   /**
-   * Dispara la regeneración del reporte combinado sin bloquear al llamador
-   * ni depender de que "algo más" mantenga viva la ejecución después de
-   * responder — waitUntil() (de @vercel/functions) le garantiza a Vercel
-   * que termine esta promesa antes de congelar la instancia, algo que un
-   * simple ".catch()" sin await NO asegura en funciones serverless.
-   * Consolidado aquí porque los cinco métodos que mutan un reciclador
-   * necesitan disparar exactamente lo mismo.
+   * Genera la Solicitud de Inclusión (PDF) de un reciclador al vuelo, sin
+   * guardar nada — se llama cada vez que se pide la descarga (individual
+   * o en el ZIP general), así el documento siempre refleja los barrios y
+   * rutas actuales en vez de quedar fijo a como estaban el día que se
+   * generó una vez.
    */
-  private dispararRegeneracionReporteCertificados(): void {
-    const promesa = this.regenerarReporteCertificadosGeneral().catch((err) =>
-      console.error(
-        'Error regenerando el reporte general de certificados:',
-        err,
-      ),
-    );
-    waitUntil(promesa);
-  }
-
-  /**
-   * Junta el certificado de vinculación de todos los recicladores ACTIVOS
-   * (mismo criterio que la pestaña "Todos": no desvinculados) en un solo
-   * PDF y lo sube a Supabase Storage — con un nombre NUEVO cada vez
-   * (timestamp incluido), no siempre el mismo path. Esto es lo que
-   * resuelve el problema de caché de raíz: una URL jamás solicitada antes
-   * no puede venir de una copia en caché, a diferencia de sobrescribir
-   * siempre el mismo archivo. Los archivos de versiones anteriores se
-   * borran al final, para no acumular basura en el bucket.
-   *
-   * El archivo marcador (.regenerando) se sube ANTES de empezar y se
-   * quita SIEMPRE al terminar (en el finally, incluso si algo falla) —
-   * es lo único que el frontend consulta (indirectamente, vía
-   * obtenerEstadoReporteCertificados) para saber cuándo mostrar
-   * "Actualizando certificados..." y cuándo dejar de hacerlo. Si no se
-   * quitara también en el error, el botón quedaría bloqueado para
-   * siempre ante cualquier falla.
-   *
-   * Se llama en fire-and-forget (ver dispararRegeneracionReporteCertificados)
-   * desde create/update/toggleCenso/softDelete/reactivate — nunca se
-   * espera desde el request que originó el cambio, para no hacer más
-   * lenta esa respuesta.
-   */
-  private async regenerarReporteCertificadosGeneral(): Promise<void> {
-    const bucketName = process.env.SUPABASE_BUCKET || 'certificados';
-
-    await this.supabase.storage
-      .from(bucketName)
-      .upload(this.REPORTE_MARCADOR_PATH, Buffer.from('1'), {
-        upsert: true,
-        cacheControl: '0',
-      });
-
-    try {
-      const recyclers = await this.findAll({});
-
-      // generarCertificadoGeneralPdf es async (cede el control entre cada
-      // reciclador para no bloquear el event loop de punta a punta con
-      // listas grandes) — hace falta el await aquí, si no `doc` sería la
-      // Promise en vez del PDFDocument.
-      const doc = await generarCertificadoGeneralPdf(
-        recyclers.map((r) => ({
-          nombreCompleto: r.nombreCompleto,
-          tipoDocumento: r.tipoDocumento,
-          cedula: r.cedula,
-          barrios: r.barrios.map((b) => b.nombreBarrio).filter(Boolean),
-          fechaVinculacion: r.fechaIngreso,
-        })),
-      );
-      doc.end();
-      const buffer = await streamToBuffer(doc);
-
-      const nuevoNombre = `${this.REPORTE_PREFIJO}${Date.now()}.pdf`;
-      const nuevaRuta = `${this.REPORTE_CARPETA}/${nuevoNombre}`;
-
-      const { error } = await this.supabase.storage
-        .from(bucketName)
-        .upload(nuevaRuta, buffer, {
-          contentType: 'application/pdf',
-          upsert: true,
-          cacheControl: '0',
-        });
-
-      if (error) {
-        throw new Error(
-          `No se pudo guardar el reporte general de certificados: ${error.message}`,
-        );
-      }
-
-      // Limpieza: borra cualquier versión anterior (mismo prefijo, salvo
-      // la que se acaba de subir).
-      const { data: listado } = await this.supabase.storage
-        .from(bucketName)
-        .list(this.REPORTE_CARPETA);
-      const anteriores = (listado ?? [])
-        .filter(
-          (f) =>
-            f.name.startsWith(this.REPORTE_PREFIJO) && f.name !== nuevoNombre,
-        )
-        .map((f) => `${this.REPORTE_CARPETA}/${f.name}`);
-      if (anteriores.length > 0) {
-        await this.supabase.storage.from(bucketName).remove(anteriores);
-      }
-    } finally {
-      await this.supabase.storage
-        .from(bucketName)
-        .remove([this.REPORTE_MARCADOR_PATH]);
-    }
-  }
-
-  /**
-   * Estado actual del reporte combinado — de solo lectura, no dispara
-   * ninguna regeneración ni escribe nada en Storage. El frontend la usa
-   * de dos formas: (1) una vez al cargar la página, para saber la URL
-   * vigente sin esperar nada; (2) en sondeo (polling) después de crear o
-   * editar un reciclador, hasta que actualizando pase a false — ese es el
-   * "estar a la escucha" de que la regeneración en segundo plano ya
-   * terminó, sin que el propio botón de exportar dispare ni espere nada.
-   */
-  async obtenerEstadoReporteCertificados(): Promise<EstadoReporteCertificados> {
-    const bucketName = process.env.SUPABASE_BUCKET || 'certificados';
-
-    const { data: listado } = await this.supabase.storage
-      .from(bucketName)
-      .list(this.REPORTE_CARPETA);
-    const archivos = listado ?? [];
-
-    const marcadorExiste = archivos.some((f) => f.name === '.regenerando');
-    if (marcadorExiste) {
-      return { actualizando: true, url: null };
+  async generarDocumentoAfiliacion(
+    recyclerId: number,
+  ): Promise<{ buffer: Buffer; cedula: string }> {
+    const recycler = await this.prisma.recycler.findUnique({
+      where: { id: recyclerId },
+      select: {
+        cedula: true,
+        nombreCompleto: true,
+        telefono: true,
+        detalleUbicacion: true,
+        barrios: {
+          select: {
+            barrio: {
+              select: {
+                nombre: true,
+                localidadRel: { select: { nombre: true } },
+              },
+            },
+          },
+        },
+        microrrutas: {
+          select: { microrruta: { select: { diasFrecuencia: true } } },
+        },
+      },
+    });
+    if (!recycler) {
+      throw new NotFoundException(`Reciclador ${recyclerId} no encontrado`);
     }
 
-    const actual = archivos
-      .filter((f) => f.name.startsWith(this.REPORTE_PREFIJO))
-      // El timestamp va en el nombre — el más reciente ordena último
-      // alfabéticamente porque Date.now() siempre crece.
-      .sort((a, b) => b.name.localeCompare(a.name))[0];
+    const datos: DatosAfiliacion = {
+      cedula: recycler.cedula,
+      nombreCompleto: recycler.nombreCompleto,
+      telefono: recycler.telefono,
+      detalleUbicacion: recycler.detalleUbicacion,
+      barrios: recycler.barrios.map((b) => ({
+        nombre: b.barrio?.nombre ?? '',
+        localidadNombre: b.barrio?.localidadRel?.nombre ?? null,
+      })),
+      microrrutas: recycler.microrrutas.map((m) => ({
+        diasFrecuencia: m.microrruta.diasFrecuencia,
+      })),
+    };
 
-    if (!actual) {
-      return { actualizando: false, url: null };
-    }
+    const doc = generarDocumentoAfiliacionPdf(datos);
+    doc.end();
+    const buffer = await streamToBuffer(doc);
 
-    const { data } = this.supabase.storage
-      .from(bucketName)
-      .getPublicUrl(`${this.REPORTE_CARPETA}/${actual.name}`);
-
-    return { actualizando: false, url: data.publicUrl };
+    return { buffer, cedula: recycler.cedula };
   }
 }
