@@ -4,9 +4,6 @@ import {
   IsBoolean,
   IsEnum,
   IsArray,
-  IsInt,
-  Min,
-  Max,
   MaxLength,
   Matches,
 } from 'class-validator';
@@ -61,23 +58,15 @@ export class CreateRecyclerDto {
   @MaxLength(255)
   detalleUbicacion?: string;
 
-  // Edad y dirección: no se muestran en la tabla del admin, solo se usan
-  // al imprimir los informes de Excel. El front los manda como string
-  // (igual que el resto del formulario) — un texto vacío se guarda como
-  // null, igual que telefono, así también se puede borrar uno ya
-  // registrado al editar.
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string'
-      ? value.trim() === ''
-        ? null
-        : Number(value)
-      : value,
-  )
+  // Fecha de nacimiento y dirección: no se muestran en la tabla del
+  // admin, solo se usan al imprimir los informes de Excel (la edad se
+  // calcula ahí a partir de esta fecha, ver recyclers-export.util.ts).
+  // Mismo patrón que fechaIngreso (string "YYYY-MM-DD"); a diferencia de
+  // ese campo, un string vacío es válido aquí (se guarda como null en el
+  // service — ver create()/update() en recyclers.service.ts).
   @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(120)
-  edad?: number | null;
+  @IsString()
+  fechaNacimiento?: string;
 
   // Dirección de la casa (no de correo/correspondencia) — distinta de
   // detalleUbicacion, que es una aclaración sobre el barrio asignado.

@@ -1,57 +1,5 @@
 import * as ExcelJS from 'exceljs';
 
-export type TipoExportRecyclers =
-  | 'todos'
-  | 'desvinculados'
-  | 'censados'
-  | 'no_censados'
-  | 'con_ruta'
-  | 'sin_ruta';
-
-const TIPOS_VALIDOS: TipoExportRecyclers[] = [
-  'todos',
-  'desvinculados',
-  'censados',
-  'no_censados',
-  'con_ruta',
-  'sin_ruta',
-];
-
-export function parseTipoExportRecyclers(
-  tipo: string | undefined,
-): TipoExportRecyclers {
-  return TIPOS_VALIDOS.includes(tipo as TipoExportRecyclers)
-    ? (tipo as TipoExportRecyclers)
-    : 'todos';
-}
-
-/**
- * Traduce el tipo de exportación a los filtros que ya entiende
- * RecyclersService.findAll — reutiliza exactamente la misma lógica que ya
- * usa la tabla del admin, no se duplica ninguna consulta.
- */
-export function mapearTipoAFiltrosFindAll(tipo: TipoExportRecyclers): {
-  desvinculados?: boolean;
-  rutas?: 'con_ruta' | 'sin_ruta';
-  censado?: boolean;
-} {
-  switch (tipo) {
-    case 'desvinculados':
-      return { desvinculados: true };
-    case 'censados':
-      return { censado: true };
-    case 'no_censados':
-      return { censado: false };
-    case 'con_ruta':
-      return { rutas: 'con_ruta' };
-    case 'sin_ruta':
-      return { rutas: 'sin_ruta' };
-    case 'todos':
-    default:
-      return {};
-  }
-}
-
 // Mismos tonos que usan los estilos de celda predefinidos de Excel
 // ("Bueno"/"Malo"/"Neutral") al marcar valores verdadero/falso con formato
 // condicional — no son colores inventados.
@@ -114,6 +62,24 @@ function formatearDiasFrecuenciaCorto(diasFrecuencia: string | null): string {
     .join(' ');
 }
 
+// Edad en años completos a partir de la fecha de nacimiento — se calcula
+// acá en vez de guardarse fija (ver fechaNacimiento en el schema), así no
+// hay que corregirla a mano cada año. Misma aritmética en UTC que
+// formatearFecha (de arriba), para no depender de la zona horaria del
+// servidor.
+function calcularEdad(fechaNacimiento: Date | string | null): number | null {
+  if (!fechaNacimiento) return null;
+  const nacimiento = new Date(fechaNacimiento);
+  const hoy = new Date();
+  let edad = hoy.getUTCFullYear() - nacimiento.getUTCFullYear();
+  const aunNoCumpleEsteAnio =
+    hoy.getUTCMonth() < nacimiento.getUTCMonth() ||
+    (hoy.getUTCMonth() === nacimiento.getUTCMonth() &&
+      hoy.getUTCDate() < nacimiento.getUTCDate());
+  if (aunNoCumpleEsteAnio) edad -= 1;
+  return edad;
+}
+
 // Forma exacta de lo que devuelve RecyclersService.findAll() (ya mapeado,
 // no el resultado crudo de Prisma).
 interface RecyclerExportRow {
@@ -124,7 +90,7 @@ interface RecyclerExportRow {
   censado: boolean;
   clasificacion: string;
   detalleUbicacion: string | null;
-  edad: number | null;
+  fechaNacimiento: Date | string | null;
   direccion: string | null;
   deletedAt: Date | string | null;
   barrios: Array<{ barrioId: string; nombreBarrio: string }>;
@@ -190,7 +156,7 @@ function escribirHojaRecyclers(
       numero: index + 1,
       nombreCompleto: r.nombreCompleto,
       cedula: r.cedula,
-      edad: r.edad ?? '',
+      edad: calcularEdad(r.fechaNacimiento) ?? '',
       direccion: r.direccion ?? '',
       telefono: r.telefono ?? '',
       // El detalle se agrega una sola vez, al final de la lista completa
@@ -237,18 +203,20 @@ function escribirHojaRecyclers(
 }
 
 /**
- * Genera el Excel de recicladores. `desvinculados` es el único tipo que NO
- * lleva columna de Clasificación (no aplica al histórico) — el resto de
- * columnas y los colores de Censo/Rutas son iguales en todos los tipos.
+ * Genera el Excel de recicladores que están viendo en la tabla del admin
+ * (ya filtrados por RecyclersService.findAll antes de llegar aquí).
+ * `incluyeClasificacion` lo decide el controller a partir del filtro de
+ * estado (false solo al ver el histórico de desvinculados, igual que
+ * antes) — el resto de columnas y los colores de Censo/Rutas no cambian.
  */
 export async function generarExcelRecyclers(
   recyclers: RecyclerExportRow[],
-  tipo: TipoExportRecyclers,
+  incluyeClasificacion: boolean,
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Recicladores');
   escribirHojaRecyclers(sheet, recyclers, {
-    incluyeClasificacion: tipo !== 'desvinculados',
+    incluyeClasificacion,
     incluyeTelefono: true,
   });
 

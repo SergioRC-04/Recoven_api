@@ -176,7 +176,7 @@ export class RecyclersService {
       censado: r.censado,
       clasificacion: r.clasificacion,
       detalleUbicacion: r.detalleUbicacion,
-      edad: r.edad,
+      fechaNacimiento: r.fechaNacimiento,
       direccion: r.direccion,
       estadoVinculacion: r.estadoVinculacion,
       deletedAt: r.deletedAt,
@@ -224,6 +224,9 @@ export class RecyclersService {
             fechaIngreso: data.fechaIngreso
               ? new Date(data.fechaIngreso)
               : new Date('2025-01-01'),
+            fechaNacimiento: data.fechaNacimiento
+              ? new Date(data.fechaNacimiento)
+              : null,
             // El barrio NO se guarda aquí si hay microrrutas: se deriva
             // justo debajo (sincronizarBarrioReciclador) a partir de
             // ellas, ignorando lo que haya venido en barriosIds.
@@ -341,6 +344,16 @@ export class RecyclersService {
             ...data,
             ...(data.fechaIngreso && {
               fechaIngreso: new Date(data.fechaIngreso),
+            }),
+            // A diferencia de fechaIngreso (nunca llega vacío, el input es
+            // required), este campo sí puede llegar como string vacío
+            // desde el form (se borró la fecha) — por eso se distingue
+            // "no vino" (undefined, no se toca) de "vino vacío" (se limpia
+            // a null), en vez de usar un && como el de arriba.
+            ...(data.fechaNacimiento !== undefined && {
+              fechaNacimiento: data.fechaNacimiento
+                ? new Date(data.fechaNacimiento)
+                : null,
             }),
           },
         });

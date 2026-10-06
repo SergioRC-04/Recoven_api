@@ -20,11 +20,7 @@ import { CreateRecyclerDto } from './dto/create-recycler.dto';
 import { UpdateRecyclerDto } from './dto/update-recycler.dto';
 import { ClasificacionRecycler, Municipio } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-import {
-  generarExcelRecyclers,
-  parseTipoExportRecyclers,
-  mapearTipoAFiltrosFindAll,
-} from './utils/recyclers-export.util';
+import { generarExcelRecyclers } from './utils/recyclers-export.util';
 
 function parseMunicipioCierre(raw?: string): Municipio {
   if (raw === Municipio.BARRANQUILLA || raw === Municipio.PUERTO_COLOMBIA) {
@@ -159,25 +155,50 @@ export class RecyclersController {
     res.send(buffer);
   }
 
+  // Exporta exactamente lo que se ve en la tabla del admin en ese
+  // momento — mismos query params y mismo parseo que findAll() (arriba),
+  // así el Excel coincide siempre con los filtros ya aplicados en
+  // pantalla, en vez de depender de un "tipo" de reporte aparte que no
+  // los tenía en cuenta.
   @Get('exportar')
   async exportar(
-    @Query('tipo') tipoRaw: string | undefined,
+    @Query('desvinculados') desvinculadosRaw: string | undefined,
+    @Query('rutas') rutas: 'con_ruta' | 'sin_ruta' | undefined,
+    @Query('clasificacion')
+    clasificacionRaw:
+      | ClasificacionRecycler
+      | ClasificacionRecycler[]
+      | undefined,
+    @Query('censado') censadoRaw: string | undefined,
+    @Query('barrioId') barrioIdRaw: string | string[] | undefined,
     @Query('municipio') municipioRaw: string | undefined,
+    @Query('search') search: string | undefined,
     @Res() res: Response,
   ) {
-    const tipo = parseTipoExportRecyclers(tipoRaw);
+    const desvinculados = desvinculadosRaw === 'true';
+    const censado =
+      censadoRaw !== undefined ? censadoRaw === 'true' : undefined;
     const municipio = parseMunicipioFiltro(municipioRaw);
-    const filtros = { ...mapearTipoAFiltrosFindAll(tipo), municipio };
-    const recyclers = await this.recyclersService.findAll(filtros);
-    const buffer = await generarExcelRecyclers(recyclers, tipo);
 
+    const recyclers = await this.recyclersService.findAll({
+      desvinculados,
+      rutas,
+      clasificacion: normalizarAArray(clasificacionRaw),
+      censado,
+      barrioId: normalizarAArray(barrioIdRaw),
+      municipio,
+      search,
+    });
+    const buffer = await generarExcelRecyclers(recyclers, !desvinculados);
+
+    const fecha = new Date().toISOString().split('T')[0];
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="recicladores-${tipo}.xlsx"`,
+      `attachment; filename="recicladores-${fecha}.xlsx"`,
     );
     res.send(buffer);
   }
