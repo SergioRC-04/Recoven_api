@@ -124,6 +124,8 @@ interface RecyclerExportRow {
   censado: boolean;
   clasificacion: string;
   detalleUbicacion: string | null;
+  edad: number | null;
+  direccion: string | null;
   deletedAt: Date | string | null;
   barrios: Array<{ barrioId: string; nombreBarrio: string }>;
   microrrutas: Array<{
@@ -151,6 +153,8 @@ function escribirHojaRecyclers(
     { header: 'N°', key: 'numero', width: 6 },
     { header: 'Nombre Completo', key: 'nombreCompleto', width: 32 },
     { header: 'Cédula', key: 'cedula', width: 16 },
+    { header: 'Edad', key: 'edad', width: 8 },
+    { header: 'Dirección', key: 'direccion', width: 28 },
   ];
   if (incluyeTelefono) {
     columnas.push({ header: 'Teléfono', key: 'telefono', width: 16 });
@@ -186,6 +190,8 @@ function escribirHojaRecyclers(
       numero: index + 1,
       nombreCompleto: r.nombreCompleto,
       cedula: r.cedula,
+      edad: r.edad ?? '',
+      direccion: r.direccion ?? '',
       telefono: r.telefono ?? '',
       // El detalle se agrega una sola vez, al final de la lista completa
       // de barrios — es un solo campo general por reciclador (no uno por

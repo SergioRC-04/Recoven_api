@@ -176,6 +176,8 @@ export class RecyclersService {
       censado: r.censado,
       clasificacion: r.clasificacion,
       detalleUbicacion: r.detalleUbicacion,
+      edad: r.edad,
+      direccion: r.direccion,
       estadoVinculacion: r.estadoVinculacion,
       deletedAt: r.deletedAt,
       createdAt: r.createdAt,
