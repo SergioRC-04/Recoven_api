@@ -46,7 +46,7 @@ export interface DatosAfiliacion {
   cedula: string;
   nombreCompleto: string;
   telefono: string | null;
-  detalleUbicacion: string | null;
+  direccion: string | null;
   barrios: BarrioAfiliacion[];
   microrrutas: MicrorrutaAfiliacion[];
 }
@@ -407,7 +407,7 @@ export function generarDocumentoAfiliacionPdf(
   lineaAngostaMixta('Nombre: ', datos.nombreCompleto);
   lineaAngostaMixta('Documento de Identificación No: ', datos.cedula);
   lineaAngostaMixta('Número de celular: ', datos.telefono ?? '');
-  lineaAngostaMixta('Dirección de la casa: ', datos.detalleUbicacion ?? '');
+  lineaAngostaMixta('Dirección de la casa: ', datos.direccion ?? '');
 
   doc.x = doc.page.margins.left;
   doc.y = Math.max(doc.y, yBloque + altoHuella) + 14;

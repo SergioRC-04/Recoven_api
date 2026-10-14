@@ -762,7 +762,7 @@ export class RecyclersService {
         cedula: true,
         nombreCompleto: true,
         telefono: true,
-        detalleUbicacion: true,
+        direccion: true,
         barrios: {
           select: {
             barrio: {
@@ -786,7 +786,7 @@ export class RecyclersService {
       cedula: recycler.cedula,
       nombreCompleto: recycler.nombreCompleto,
       telefono: recycler.telefono,
-      detalleUbicacion: recycler.detalleUbicacion,
+      direccion: recycler.direccion,
       barrios: recycler.barrios.map((b) => ({
         nombre: b.barrio?.nombre ?? '',
         localidadNombre: b.barrio?.localidadRel?.nombre ?? null,
